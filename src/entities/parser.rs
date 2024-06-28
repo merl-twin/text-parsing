@@ -3,9 +3,9 @@ use super::{
     state::EntityState,
 };
 use crate::{
-    ParserEvent,Error,Local,ParserResult,
-    Source, SourceNext, FlatParser,
-    ParserNext, InnerParser,
+    ParserResult,
+    Source, SourceEvent, ParserEvent, SourceResult, Local,
+    Parser, InnerParser, PipeParser, IntoPipeParser,
 };
 
 /*
@@ -37,13 +37,13 @@ impl Builder {
     pub fn new() -> Builder {
         Builder { }
     }
-    pub fn create(self) -> Parser {
-        Parser(InnerParser::new(()))
+    pub fn create(self) -> EntityParser {
+        EntityParser(InnerParser::new(()))
     }
 }
 
-pub struct Parser(InnerParser<EntityState,Entity,()>);
-impl ParserNext for Parser {
+pub struct EntityParser(InnerParser<EntityState,Entity,()>);
+impl Parser for EntityParser {
     type Data = Entity;
     
     fn next_event<S: Source>(&mut self, src: &mut S) -> ParserResult<Entity> {
@@ -51,43 +51,46 @@ impl ParserNext for Parser {
     }
 }
 
-/*impl FlatParser for Parser {
-    type Flatten = SourceParser;
+impl IntoPipeParser for EntityParser {
+    type Piped = PipedEntityParser;
     
-    fn flatten(self) -> Self::Flatten {
-        SourceParser {
+    fn into_piped(self) -> Self::Piped {
+        PipedEntityParser {
             parser: self.0,
-            tmp_char: None,
+            tmp: None,
         }
     }
 }
 
-pub struct SourceParser {
+pub struct PipedEntityParser {
     parser: InnerParser<EntityState,Entity,()>,
-    tmp_char: Option<Local<char>>,
+    tmp: Option<Local<SourceEvent>>,
 }
 
-impl SourceNext for SourceParser {
-    fn next_event<S: Source>(&mut self, src: &mut S) -> Result<Option<Local<char>>,Error> {
-        Ok(match self.tmp_char.take() {
-            Some(local_char) => Some(local_char), 
+impl PipeParser for PipedEntityParser {
+    fn next_char<S: Source>(&mut self, src: &mut S) -> SourceResult {
+        Ok(match self.tmp.take() {
+            Some(local_se) => Some(local_se), 
             None => match self.parser.next_event(src)? {
-                Some(local_ent) => match local_ent.data() {
-                    ParserEvent::Char(c) => Some(local_ent.local(*c)),
-                    ParserEvent::Breaker(b) => //Some(local_ent.local(b)),
-                    ParserEvent::Parsed(ent) => match ent.entity {
-                        Instance::Char(c) => Some(local_ent.local(c)),
-                        Instance::Char2(c1,c2) => {
-                            self.tmp_char = Some(local_ent.local(c2));
-                            Some(local_ent.local(c1))
+                Some(local_ent) => {
+                    let (local,ent) = local_ent.into_inner();
+                    match ent {
+                        ParserEvent::Char(c) => Some(local.local(SourceEvent::Char(c))),
+                        ParserEvent::Breaker(b) => Some(local.local(SourceEvent::Breaker(b))),
+                        ParserEvent::Parsed(ent) => match ent.entity {
+                            Instance::Char(c) => Some(local.local(SourceEvent::Char(c))),
+                            Instance::Char2(c1,c2) => {
+                                self.tmp = Some(local.local(SourceEvent::Char(c2)));
+                                Some(local.local(SourceEvent::Char(c1)))
+                            },
                         },
-                    },
+                    }
                 },
                 None => None,
             },
         })
     }
-}*/
+}
 
 
 #[cfg(test)]
@@ -107,14 +110,38 @@ mod tests {
     }
 
     #[test]
-    fn basic_flatten() {
+    fn basic_piped() {
         let mut src = " &blabla; &#111111111; &quot &AMP; &&GreaterGreater; &#128175; &#x2764;".into_source();
-        let mut parser = Builder::new().create().flatten();
+        let mut parser = Builder::new().create().into_piped();
 
-        while let Some(local_event) = parser.next_event(&mut src).unwrap() {
-            println!("{:?}",local_event);
+        while let Some(local_se) = parser.next_char(&mut src).unwrap() {
+            println!("{:?}",local_se);
         }
         panic!();
-    } 
+    }
+
+    #[test]
+    fn basic_piped_2() {        
+        let mut src = " &blabla; &#111111111; &quot &AMP; &&GreaterGreater; &#128175; &#x2764;"
+            .into_source()
+            .map(Builder::new().create().into_piped());
+
+        while let Some(local_se) = src.next_char().unwrap() {
+            println!("{:?}",local_se);
+        }
+        panic!();
+    }
+    
+    #[test]
+    fn basic_piped_3() {        
+        let mut src = " &blabla; &#111111111; &quot &AMP; &&GreaterGreater; &#128175; &#x2764;"
+            .into_source()
+            .map(Builder::new().create().piped(|_| None));
+
+        while let Some(local_se) = src.next_char().unwrap() {
+            println!("{:?}",local_se);
+        }
+        panic!();
+    }
 }
 

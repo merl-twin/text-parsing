@@ -22,6 +22,13 @@ pub struct Local<E> {
     data: E,
 }
 impl<E> Local<E> {
+    pub fn into_inner(self) -> (Local<()>,E) {
+        (Local {
+            chars: self.chars,
+            bytes: self.bytes,
+            data: (),
+        }, self.data)
+    }
     pub fn data(&self) -> &E {
         &self.data
     }

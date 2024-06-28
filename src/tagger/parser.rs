@@ -9,7 +9,8 @@ use super::{
 use crate::{
     ParserResult,
     Source,
-    ParserNext, InnerParser,
+    Parser, InnerParser, PipeParser,
+    ParserEvent, SourceEvent, SourceResult,
 };
 
 /*
@@ -47,8 +48,8 @@ impl Builder {
         self.properties.eof_in_tag = Unknown::Skip;
         self
     }
-    pub fn create(self) -> Parser {
-        Parser(InnerParser::new(self.properties))
+    pub fn create(self) -> TagParser {
+        TagParser(InnerParser::new(self.properties))
     }
 }
 
@@ -81,12 +82,29 @@ impl Default for TaggerProperties {
     }
 }
 
-pub struct Parser(InnerParser<TaggerState,Tag,TaggerProperties>);
-impl ParserNext for Parser {
+pub struct TagParser(InnerParser<TaggerState,Tag,TaggerProperties>);
+
+impl Parser for TagParser {
     type Data = Tag;
     
     fn next_event<S: Source>(&mut self, src: &mut S) -> ParserResult<Tag> {
         self.0.next_event(src)
+    }
+}
+
+impl PipeParser for TagParser {
+    fn next_char<S: Source>(&mut self, src: &mut S) -> SourceResult {
+        Ok(match self.next_event(src)? {
+            Some(local_pe) => {
+                let (local,pe) = local_pe.into_inner();
+                Some(local.local(match pe {
+                    ParserEvent::Char(c) => SourceEvent::Char(c),
+                    ParserEvent::Breaker(b) => SourceEvent::Breaker(b),
+                    ParserEvent::Parsed(tag) => SourceEvent::Breaker(tag.breaker),
+                }))
+            },
+            None => None,
+        })
     }
 }
 
@@ -127,6 +145,31 @@ mod tests {
 
         while let Some(local_event) = parser.next_event(&mut src).unwrap() {
             println!("{:?}",local_event);
+        }
+        panic!();
+    }
+
+    #[test]
+    fn basic_pipe() {
+        let mut src = "<h1>Hello, world!</h1>Привет, мир, &#x2<wbr>764;!"
+            .into_source()
+            .map(Builder::new().create());
+
+        while let Some(local_se) = src.next_char().unwrap() {
+            println!("{:?}",local_se);
+        }
+        panic!();
+    }
+
+    #[test]
+    fn basic_pipe_ent() {
+        let mut src = "<h1>Hello, world!</h1>Привет, мир, &#x2<wbr>764;!"
+            .into_source()
+            .map(Builder::new().create())
+            .map(crate::entities::Builder::new().create().into_piped());
+
+        while let Some(local_se) = src.next_char().unwrap() {
+            println!("{:?}",local_se);
         }
         panic!();
     }

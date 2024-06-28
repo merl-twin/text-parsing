@@ -14,6 +14,14 @@ mod source;
 pub use source::{
     Source, IntoSource,
     StrSource,
+    SourceExt,
+};
+
+mod parser;
+pub use parser::{
+    ParserExt,
+    PipeParser,
+    IntoPipeParser,
 };
 
 pub mod entities {
@@ -21,7 +29,7 @@ pub mod entities {
     mod parser;
     mod state;
 
-    pub use parser::{Builder,Parser};
+    pub use parser::{Builder,EntityParser};
 }
 
 pub mod tagger {
@@ -29,7 +37,7 @@ pub mod tagger {
     mod state;
     mod parser;
 
-    pub use parser::{Builder,Parser};
+    pub use parser::{Builder,TagParser};
 }
 
 
@@ -69,11 +77,20 @@ pub enum SourceEvent {
     Char(char),
     Breaker(Breaker),
 }
+pub trait Sourcefy {
+    fn sourcefy(self) -> SourceEvent;
+}
+impl Sourcefy for char {
+    fn sourcefy(self) -> SourceEvent {
+        SourceEvent::Char(self)
+    }
+}
 
-pub type LocalChar = Local<SourceEvent>;
+
 pub type LocalEvent<D> = Local<ParserEvent<D>>;
 
-pub type ParserResult<D> =  Result<Option<Local<ParserEvent<D>>>,Error>;
+pub type SourceResult =  Result<Option<Local<SourceEvent>>,Error>;
+pub type ParserResult<D> =  Result<Option<LocalEvent<D>>,Error>;
 pub type NextState<S, D> = Result<InnerState<S,D>,Error>;
 
 pub struct InnerState<S: Default, D> {
@@ -105,22 +122,12 @@ pub trait ParserState: Default {
     type Data;
     
     fn eof(self, context: &Self::Context) -> NextState<Self,Self::Data>;
-    fn next_state(self, local_char: Local<char>, context: &Self::Context) -> NextState<Self,Self::Data>;
+    fn next_state(self, local_char: Local<SourceEvent>, context: &Self::Context) -> NextState<Self,Self::Data>;
 }
 
-pub trait ParserNext {
+pub trait Parser {
     type Data;
     fn next_event<S: Source>(&mut self, src: &mut S) -> ParserResult<Self::Data>;
-}
-
-pub trait FlatParser {
-    type Flatten: SourceNext;
-    
-    fn flatten(self) -> Self::Flatten;
-}
-
-pub trait SourceNext {
-    fn next_event<S: Source>(&mut self, src: &mut S) -> Result<Option<Local<char>>,Error>;
 }
 
 struct InnerParser<S,D,C> // State, Data, Context
@@ -169,7 +176,7 @@ where S: ParserState<Data = D, Context = C>
     }
 }
 
-impl<S,D,C> ParserNext for InnerParser<S,D,C>
+impl<S,D,C> Parser for InnerParser<S,D,C>
 where S: ParserState<Data = D, Context = C>
 {
     type Data = D;
