@@ -9,8 +9,7 @@ use super::{
 use crate::{
     ParserResult,
     Source,
-    Parser, Runtime, PipeParser,
-    ParserEvent, SourceEvent, SourceResult,
+    Parser, Runtime,
 };
 
 /*

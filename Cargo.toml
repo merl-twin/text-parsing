@@ -1,8 +1,19 @@
 [package]
-name = "text-clean"
+name = "text-parsing"
 version = "0.1.0"
 edition = "2021"
+authors = ["merl <merl.001.mia@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+description = "Hierarchical text processing preserving char position info"
 
+repository = "https://github.com/merl-twin/text-parsing"
+homepage = "https://github.com/merl-twin/text-parsing"
+
+include = [
+    "**/*.rs",
+    "Cargo.toml",
+]
 
 
 [dependencies]
