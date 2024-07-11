@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     Error, Local, ParserEvent,
-    NextState, InnerState, ParserState,
+    NextResult, Next, StateMachine,
     SourceEvent, Breaker,
 };
 
@@ -33,8 +33,8 @@ pub(in super) struct ReadEntity {
     chars: Vec<Local<char>>,
 }
 impl ReadEntity {
-    fn named_into_state(self) -> NextState<EntityState,Entity> {
-        let mut ns = InnerState::empty();
+    fn named_into_state(self) -> NextResult<EntityState,Entity> {
+        let mut ns = Next::empty();
         match ENTITIES.get(&self.content) {
             Some(e) => ns = ns.with_event(create_entity_event(self,e)?),
             None => for c in self.chars {
@@ -43,8 +43,8 @@ impl ReadEntity {
         }
         Ok(ns)
     }
-    fn number_into_state(self) -> NextState<EntityState,Entity> {
-        let mut ns = InnerState::empty();
+    fn number_into_state(self) -> NextResult<EntityState,Entity> {
+        let mut ns = Next::empty();
         match match u32::from_str_radix(&self.content,10) {
             Ok(u) => char::from_u32(u),
             Err(_) => None,
@@ -56,8 +56,8 @@ impl ReadEntity {
         }
         Ok(ns)
     }
-    fn number_x_into_state(self) -> NextState<EntityState,Entity> {
-        let mut ns = InnerState::empty();
+    fn number_x_into_state(self) -> NextResult<EntityState,Entity> {
+        let mut ns = Next::empty();
         match match u32::from_str_radix(&self.content,16) {
             Ok(u) => char::from_u32(u),
             Err(_) => None,
@@ -69,8 +69,8 @@ impl ReadEntity {
         }
         Ok(ns)
     }
-    fn failed_into_state(self) -> NextState<EntityState,Entity> {
-        let mut ns = InnerState::empty();
+    fn failed_into_state(self) -> NextResult<EntityState,Entity> {
+        let mut ns = Next::empty();
         for c in self.chars {
             ns = ns.with_event(c.map(|c| ParserEvent::Char(c)));
         }
@@ -78,16 +78,16 @@ impl ReadEntity {
     }
 }
 
-impl ParserState for EntityState {
+impl StateMachine for EntityState {
     type Context = ();
     type Data = Entity;
     
-    fn eof(self, _: &Self::Context) -> NextState<EntityState,Entity> {        
+    fn eof(self, _: &Self::Context) -> NextResult<EntityState,Entity> {        
         Ok(match self {
-            EntityState::Init => InnerState::empty(),
-            EntityState::MayBeEntity(amp_char) => InnerState::empty().with_event(amp_char.map(|c| ParserEvent::Char(c))),
+            EntityState::Init => Next::empty(),
+            EntityState::MayBeEntity(amp_char) => Next::empty().with_event(amp_char.map(|c| ParserEvent::Char(c))),
             EntityState::MayBeNumEntity(amp_char,hash_char) => {
-                InnerState::empty()
+                Next::empty()
                     .with_event(amp_char.map(|c| ParserEvent::Char(c)))
                     .with_event(hash_char.map(|c| ParserEvent::Char(c)))
             },
@@ -96,7 +96,7 @@ impl ParserState for EntityState {
             EntityState::EntityNumberX(ent) => ent.failed_into_state()?,
         })
     }
-    fn next_state(self, local_src: Local<SourceEvent>,  _: &Self::Context) -> NextState<EntityState,Entity> {
+    fn next_state(self, local_src: Local<SourceEvent>,  _: &Self::Context) -> NextResult<EntityState,Entity> {
         match self {
             EntityState::Init => init(local_src),
             EntityState::MayBeEntity(amp_char) => may_be_entity(amp_char,local_src),
@@ -108,20 +108,20 @@ impl ParserState for EntityState {
     }
 }
 
-fn init(local_src: Local<SourceEvent>) -> NextState<EntityState,Entity> {
+fn init(local_src: Local<SourceEvent>) -> NextResult<EntityState,Entity> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
             match lc {
-                '&' => InnerState::empty()
+                '&' => Next::empty()
                     .with_state(EntityState::MayBeEntity(local_char)),
-                _ => InnerState::empty()
+                _ => Next::empty()
                     .with_event(local_char.map(|c| ParserEvent::Char(c))),
             }
         },
         SourceEvent::Breaker(b) => match b {
-            Breaker::None => InnerState::empty(),
-            _ => InnerState::empty()
+            Breaker::None => Next::empty(),
+            _ => Next::empty()
                 .with_event(local_src.local(ParserEvent::Breaker(b))),
         },
     })
@@ -138,7 +138,7 @@ fn create_entity_event(entity: ReadEntity, replace: Instance) -> Result<Local<Pa
         })
 }
 
-fn entity_number_x(mut ent: ReadEntity, local_src: Local<SourceEvent>) -> NextState<EntityState,Entity> {
+fn entity_number_x(mut ent: ReadEntity, local_src: Local<SourceEvent>) -> NextResult<EntityState,Entity> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
@@ -147,7 +147,7 @@ fn entity_number_x(mut ent: ReadEntity, local_src: Local<SourceEvent>) -> NextSt
                     ent.current = local_char;
                     ent.content.push(*local_char.data());
                     ent.chars.push(local_char);
-                    InnerState::empty().with_state(EntityState::EntityNumberX(ent))
+                    Next::empty().with_state(EntityState::EntityNumberX(ent))
                 },
                 ';' => {
                     ent.current = local_char;
@@ -159,14 +159,14 @@ fn entity_number_x(mut ent: ReadEntity, local_src: Local<SourceEvent>) -> NextSt
             }
         },
         SourceEvent::Breaker(b) => match b {
-            Breaker::None => InnerState::empty().with_state(EntityState::EntityNumberX(ent)),
+            Breaker::None => Next::empty().with_state(EntityState::EntityNumberX(ent)),
             _ => ent.failed_into_state()?
                 .with_event(local_src.local(ParserEvent::Breaker(b))),
         },
     })
 }
 
-fn entity_number(mut ent: ReadEntity, local_src: Local<SourceEvent>) -> NextState<EntityState,Entity> {
+fn entity_number(mut ent: ReadEntity, local_src: Local<SourceEvent>) -> NextResult<EntityState,Entity> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
@@ -175,7 +175,7 @@ fn entity_number(mut ent: ReadEntity, local_src: Local<SourceEvent>) -> NextStat
                     ent.current = local_char;
                     ent.content.push(*local_char.data());
                     ent.chars.push(local_char);
-                    InnerState::empty().with_state(EntityState::EntityNumber(ent))
+                    Next::empty().with_state(EntityState::EntityNumber(ent))
                 },
                 ';' => {
                     ent.current = local_char;
@@ -187,14 +187,14 @@ fn entity_number(mut ent: ReadEntity, local_src: Local<SourceEvent>) -> NextStat
             }
         },
         SourceEvent::Breaker(b) => match b {
-            Breaker::None => InnerState::empty().with_state(EntityState::EntityNumber(ent)),
+            Breaker::None => Next::empty().with_state(EntityState::EntityNumber(ent)),
             _ => ent.failed_into_state()?
                 .with_event(local_src.local(ParserEvent::Breaker(b))),
         },
     })
 }
 
-fn may_be_num_entity(amp_char: Local<char>, hash_char: Local<char>, local_src: Local<SourceEvent>) -> NextState<EntityState,Entity> {
+fn may_be_num_entity(amp_char: Local<char>, hash_char: Local<char>, local_src: Local<SourceEvent>) -> NextResult<EntityState,Entity> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
@@ -206,7 +206,7 @@ fn may_be_num_entity(amp_char: Local<char>, hash_char: Local<char>, local_src: L
                         content: String::new(),
                         chars: vec![amp_char,hash_char,local_char],
                     };
-                    InnerState::empty()
+                    Next::empty()
                         .with_state(EntityState::EntityNumberX(ent))
                 },
                 '0' ..= '9' => {
@@ -216,22 +216,22 @@ fn may_be_num_entity(amp_char: Local<char>, hash_char: Local<char>, local_src: L
                         content: { let mut s = String::new(); s.push(*local_char.data()); s },
                         chars: vec![amp_char,hash_char,local_char],
                     };
-                    InnerState::empty()
+                    Next::empty()
                         .with_state(EntityState::EntityNumber(ent))
                 },
-                '&'=> InnerState::empty()
+                '&'=> Next::empty()
                     .with_state(EntityState::MayBeEntity(local_char))
                     .with_event(amp_char.map(|c| ParserEvent::Char(c)))
                     .with_event(hash_char.map(|c| ParserEvent::Char(c))),
-                _ => InnerState::empty()
+                _ => Next::empty()
                     .with_event(amp_char.map(|c| ParserEvent::Char(c)))
                     .with_event(hash_char.map(|c| ParserEvent::Char(c)))
                     .with_event(local_char.map(|c| ParserEvent::Char(c))),
             }
         },
         SourceEvent::Breaker(b) => match b {
-            Breaker::None => InnerState::empty().with_state(EntityState::MayBeNumEntity(amp_char,hash_char)),
-            _ => InnerState::empty()
+            Breaker::None => Next::empty().with_state(EntityState::MayBeNumEntity(amp_char,hash_char)),
+            _ => Next::empty()
                 .with_event(amp_char.map(|c| ParserEvent::Char(c)))
                 .with_event(hash_char.map(|c| ParserEvent::Char(c)))
                 .with_event(local_src.local(ParserEvent::Breaker(b))),
@@ -239,7 +239,7 @@ fn may_be_num_entity(amp_char: Local<char>, hash_char: Local<char>, local_src: L
     })
 }
 
-fn entity_named(mut ent: ReadEntity, local_src: Local<SourceEvent>) -> NextState<EntityState,Entity> {
+fn entity_named(mut ent: ReadEntity, local_src: Local<SourceEvent>) -> NextResult<EntityState,Entity> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
@@ -252,7 +252,7 @@ fn entity_named(mut ent: ReadEntity, local_src: Local<SourceEvent>) -> NextState
                     ent.current = local_char;
                     ent.content.push(*local_char.data());
                     ent.chars.push(local_char);
-                    InnerState::empty().with_state(EntityState::EntityNamed(ent))
+                    Next::empty().with_state(EntityState::EntityNamed(ent))
                 },
                 ';' => {
                     ent.current = local_char;
@@ -265,19 +265,19 @@ fn entity_named(mut ent: ReadEntity, local_src: Local<SourceEvent>) -> NextState
             }
         },
         SourceEvent::Breaker(b) => match b {
-            Breaker::None => InnerState::empty().with_state(EntityState::EntityNamed(ent)),
+            Breaker::None => Next::empty().with_state(EntityState::EntityNamed(ent)),
             _ => ent.named_into_state()?
                 .with_event(local_src.local(ParserEvent::Breaker(b))),
         },
     })
 }
 
-fn may_be_entity(amp_char: Local<char>, local_src: Local<SourceEvent>) -> NextState<EntityState,Entity> {
+fn may_be_entity(amp_char: Local<char>, local_src: Local<SourceEvent>) -> NextResult<EntityState,Entity> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
             match lc {
-                '#' => InnerState::empty().with_state(EntityState::MayBeNumEntity(amp_char,local_char)),
+                '#' => Next::empty().with_state(EntityState::MayBeNumEntity(amp_char,local_char)),
                 ':' | '_' | 'A' ..= 'Z' | 'a' ..= 'z' | '\u{C0}' ..= '\u{D6}' | '\u{D8}' ..= '\u{F6}' | '\u{F8}' ..= '\u{2FF}' |
                 '\u{370}' ..= '\u{37D}' | '\u{37F}' ..= '\u{1FFF}' | '\u{200C}' ..= '\u{200D}' | '\u{2070}' ..= '\u{218F}' |
                 '\u{2C00}' ..= '\u{2FEF}' | '\u{3001}' ..= '\u{D7FF}' | '\u{F900}' ..= '\u{FDCF}' | '\u{FDF0}' ..= '\u{FFFD}' |
@@ -293,19 +293,19 @@ fn may_be_entity(amp_char: Local<char>, local_src: Local<SourceEvent>) -> NextSt
                         },
                         chars: vec![amp_char,local_char],
                     };
-                    InnerState::empty().with_state(EntityState::EntityNamed(ent))
+                    Next::empty().with_state(EntityState::EntityNamed(ent))
                 }
-                '&' => InnerState::empty()
+                '&' => Next::empty()
                     .with_state(EntityState::MayBeEntity(local_char))
                     .with_event(amp_char.map(|c| ParserEvent::Char(c))),
-                _ => InnerState::empty()
+                _ => Next::empty()
                     .with_event(amp_char.map(|c| ParserEvent::Char(c)))
                     .with_event(local_char.map(|c| ParserEvent::Char(c))),
             }
         },
         SourceEvent::Breaker(b) => match b {
-            Breaker::None => InnerState::empty().with_state(EntityState::MayBeEntity(amp_char)),
-            _ => InnerState::empty()
+            Breaker::None => Next::empty().with_state(EntityState::MayBeEntity(amp_char)),
+            _ => Next::empty()
                 .with_event(amp_char.map(|c| ParserEvent::Char(c)))
                 .with_event(local_src.local(ParserEvent::Breaker(b))),
         },

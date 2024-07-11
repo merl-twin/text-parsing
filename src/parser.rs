@@ -1,8 +1,14 @@
 use crate::{
     Local,
-    Parser, SourceEvent, ParserEvent,
+    SourceEvent,
     SourceResult, Source,
+    Breaker, Error,
 };
+
+pub trait Parser {
+    type Data;
+    fn next_event<S: Source>(&mut self, src: &mut S) -> ParserResult<Self::Data>;
+}
 
 pub trait PipeParser {
     fn next_char<S: Source>(&mut self, src: &mut S) -> SourceResult;
@@ -26,6 +32,15 @@ pub trait ParserExt: Parser + Sized {
             current_iter: None,
         }
     }
+}
+
+pub type ParserResult<D> =  Result<Option<Local<ParserEvent<D>>>,Error>;
+
+#[derive(Debug,Eq,PartialEq)]
+pub enum ParserEvent<D> {
+    Char(char),
+    Breaker(Breaker),
+    Parsed(D),
 }
 
 pub struct Piped<P,I,F>

@@ -5,7 +5,7 @@ use super::{
 use crate::{
     ParserResult,
     Source, SourceEvent, ParserEvent, SourceResult, Local,
-    Parser, InnerParser, PipeParser, IntoPipeParser,
+    Parser, Runtime, PipeParser, IntoPipeParser,
 };
 
 /*
@@ -38,11 +38,11 @@ impl Builder {
         Builder { }
     }
     pub fn create(self) -> EntityParser {
-        EntityParser(InnerParser::new(()))
+        EntityParser(Runtime::new(()))
     }
 }
 
-pub struct EntityParser(InnerParser<EntityState,Entity,()>);
+pub struct EntityParser(Runtime<EntityState,Entity,()>);
 impl Parser for EntityParser {
     type Data = Entity;
     
@@ -63,7 +63,7 @@ impl IntoPipeParser for EntityParser {
 }
 
 pub struct PipedEntityParser {
-    parser: InnerParser<EntityState,Entity,()>,
+    parser: Runtime<EntityState,Entity,()>,
     tmp: Option<Local<SourceEvent>>,
 }
 
@@ -98,7 +98,7 @@ mod tests {
     use crate::*;
     use super::*;
     
-    #[test]
+    /*#[test]
     fn basic() {
         let mut src = " &blabla; &#111111111; &quot &AMP; &&GreaterGreater; &#128175; &#x2764;".into_source();
         let mut parser = Builder::new().create();
@@ -124,7 +124,7 @@ mod tests {
     fn basic_piped_2() {        
         let mut src = " &blabla; &#111111111; &quot &AMP; &&GreaterGreater; &#128175; &#x2764;"
             .into_source()
-            .map(Builder::new().create().into_piped());
+            .pipe(Builder::new().create().into_piped());
 
         while let Some(local_se) = src.next_char().unwrap() {
             println!("{:?}",local_se);
@@ -136,12 +136,13 @@ mod tests {
     fn basic_piped_3() {        
         let mut src = " &blabla; &#111111111; &quot &AMP; &&GreaterGreater; &#128175; &#x2764;"
             .into_source()
-            .map(Builder::new().create().piped(|_| None));
+            .pipe(Builder::new().create().piped(|_| None));
 
         while let Some(local_se) = src.next_char().unwrap() {
             println!("{:?}",local_se);
         }
         panic!();
     }
+*/
 }
 

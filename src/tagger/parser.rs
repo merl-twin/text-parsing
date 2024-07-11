@@ -9,15 +9,13 @@ use super::{
 use crate::{
     ParserResult,
     Source,
-    Parser, InnerParser, PipeParser,
+    Parser, Runtime, PipeParser,
     ParserEvent, SourceEvent, SourceResult,
 };
 
 /*
 
   Algorithm: https://dev.w3.org/html5/spec-LC/parsing.html
-
-  Entities: https://www.w3.org/TR/html5/entities.json
 
 */
 
@@ -49,7 +47,7 @@ impl Builder {
         self
     }
     pub fn create(self) -> TagParser {
-        TagParser(InnerParser::new(self.properties))
+        TagParser(Runtime::new(self.properties))
     }
 }
 
@@ -82,7 +80,7 @@ impl Default for TaggerProperties {
     }
 }
 
-pub struct TagParser(InnerParser<TaggerState,Tag,TaggerProperties>);
+pub struct TagParser(Runtime<TaggerState,Tag,TaggerProperties>);
 
 impl Parser for TagParser {
     type Data = Tag;
@@ -92,7 +90,7 @@ impl Parser for TagParser {
     }
 }
 
-impl PipeParser for TagParser {
+/*impl PipeParser for TagParser {
     fn next_char<S: Source>(&mut self, src: &mut S) -> SourceResult {
         Ok(match self.next_event(src)? {
             Some(local_pe) => {
@@ -106,7 +104,7 @@ impl PipeParser for TagParser {
             None => None,
         })
     }
-}
+}*/
 
 
 
@@ -114,28 +112,68 @@ impl PipeParser for TagParser {
 mod tests {
     use crate::*;
     use super::*;
+
+    use crate::tagger::tags::*;
+    use opt_struct::OptVec;
     
     #[test]
     fn basic() {
         let mut src = "<h1>Hello, world!</h1>Привет, мир!".into_source();
         let mut parser = Builder::new().create();
 
+        let mut res_iter = [
+            ParserEvent::Parsed(Tag { name: TagName::H1, closing: Closing::Open, attributes: OptVec::None }).localize(Snip { offset: 0, length: 4 },Snip { offset: 0, length: 4 }),
+            ParserEvent::Char('H').localize(Snip { offset: 4, length: 1 },Snip { offset: 4, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 5, length: 1 },Snip { offset: 5, length: 1 }),
+            ParserEvent::Char('l').localize(Snip { offset: 6, length: 1 },Snip { offset: 6, length: 1 }),
+            ParserEvent::Char('l').localize(Snip { offset: 7, length: 1 },Snip { offset: 7, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 8, length: 1 },Snip { offset: 8, length: 1 }),
+            ParserEvent::Char(',').localize(Snip { offset: 9, length: 1 },Snip { offset: 9, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 10, length: 1 },Snip { offset: 10, length: 1 }),
+            ParserEvent::Char('w').localize(Snip { offset: 11, length: 1 },Snip { offset: 11, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 12, length: 1 },Snip { offset: 12, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 13, length: 1 },Snip { offset: 13, length: 1 }),
+            ParserEvent::Char('l').localize(Snip { offset: 14, length: 1 },Snip { offset: 14, length: 1 }),
+            ParserEvent::Char('d').localize(Snip { offset: 15, length: 1 },Snip { offset: 15, length: 1 }),
+            ParserEvent::Char('!').localize(Snip { offset: 16, length: 1 },Snip { offset: 16, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::H1, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 17, length: 5 },Snip { offset: 17, length: 5 }),
+            ParserEvent::Char('П').localize(Snip { offset: 22, length: 1 },Snip { offset: 22, length: 2 }),
+            ParserEvent::Char('р').localize(Snip { offset: 23, length: 1 },Snip { offset: 24, length: 2 }),
+            ParserEvent::Char('и').localize(Snip { offset: 24, length: 1 },Snip { offset: 26, length: 2 }),
+            ParserEvent::Char('в').localize(Snip { offset: 25, length: 1 },Snip { offset: 28, length: 2 }),
+            ParserEvent::Char('е').localize(Snip { offset: 26, length: 1 },Snip { offset: 30, length: 2 }),
+            ParserEvent::Char('т').localize(Snip { offset: 27, length: 1 },Snip { offset: 32, length: 2 }),
+            ParserEvent::Char(',').localize(Snip { offset: 28, length: 1 },Snip { offset: 34, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 29, length: 1 },Snip { offset: 35, length: 1 }),
+            ParserEvent::Char('м').localize(Snip { offset: 30, length: 1 },Snip { offset: 36, length: 2 }),
+            ParserEvent::Char('и').localize(Snip { offset: 31, length: 1 },Snip { offset: 38, length: 2 }),
+            ParserEvent::Char('р').localize(Snip { offset: 32, length: 1 },Snip { offset: 40, length: 2 }),
+            ParserEvent::Char('!').localize(Snip { offset: 33, length: 1 },Snip { offset: 42, length: 1 }),
+        ].into_iter();
+
         while let Some(local_event) = parser.next_event(&mut src).unwrap() {
-            println!("{:?}",local_event);
+            //let (local,event) = local_event.into_inner();
+            //println!("ParserEvent::{:?}.localize({:?},{:?}),",event,local.chars(),local.bytes());
+            match res_iter.next() {
+                Some(ev) => {
+                    println!("Parser: {:?}",local_event);
+                    println!("Result: {:?}",ev);
+                    assert_eq!(local_event,ev);
+                },
+                None => {
+                    panic!("parser has more events then test result");
+                },
+            }
         }
-        panic!();
     }
 
+    
     #[test]
-    fn a_img() {
+    fn a_img() {        
         let mut src = "
-<p>In the common case, the data handled by the tokenization stage
-  comes from the network, but <a href=\"apis-in-html-documents.html#dynamic-markup-insertion\" title=\"dynamic markup
-  insertion\">it can also come from script</a> running in the user
-  agent, e.g. using the <code title=\"dom-document-write\"><a href=\"apis-in-html-documents.html#dom-document-write\">document.write()</a></code> API.</p>
-
+<p>In the common case, <a href=\"apis-in-html-documents.html#dynamic-markup-insertion\" title=\"dynamic markup
+  insertion\">, e.g. using the <code title=\"dom-document-write\"><a href=\"apis-in-html-documents.html#dom-document-write\">document.write()</a></code> API.</p>
   <p><img alt=\"\" height=\"554\" src=\"https://dev.w3.org/html5/spec/images/parsing-model-overview.png\" width=\"427\"></p>
-
   <p id=\"nestedParsing\">There is only one set of states for the
   tokenizer stage and the tree construction stage...</p>".into_source();
         let mut parser = Builder::new()
@@ -143,17 +181,397 @@ mod tests {
             .with_attribute(TagName::Img,"alt")
             .create();
 
+        let mut res_iter = [
+            ParserEvent::Char('\n').localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::P, closing: Closing::Open, attributes: OptVec::None }).localize(Snip { offset: 1, length: 3 },Snip { offset: 1, length: 3 }),
+            ParserEvent::Char('I').localize(Snip { offset: 4, length: 1 },Snip { offset: 4, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 5, length: 1 },Snip { offset: 5, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 6, length: 1 },Snip { offset: 6, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 7, length: 1 },Snip { offset: 7, length: 1 }),
+            ParserEvent::Char('h').localize(Snip { offset: 8, length: 1 },Snip { offset: 8, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 9, length: 1 },Snip { offset: 9, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 10, length: 1 },Snip { offset: 10, length: 1 }),
+            ParserEvent::Char('c').localize(Snip { offset: 11, length: 1 },Snip { offset: 11, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 12, length: 1 },Snip { offset: 12, length: 1 }),
+            ParserEvent::Char('m').localize(Snip { offset: 13, length: 1 },Snip { offset: 13, length: 1 }),
+            ParserEvent::Char('m').localize(Snip { offset: 14, length: 1 },Snip { offset: 14, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 15, length: 1 },Snip { offset: 15, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 16, length: 1 },Snip { offset: 16, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 17, length: 1 },Snip { offset: 17, length: 1 }),
+            ParserEvent::Char('c').localize(Snip { offset: 18, length: 1 },Snip { offset: 18, length: 1 }),
+            ParserEvent::Char('a').localize(Snip { offset: 19, length: 1 },Snip { offset: 19, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 20, length: 1 },Snip { offset: 20, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 21, length: 1 },Snip { offset: 21, length: 1 }),
+            ParserEvent::Char(',').localize(Snip { offset: 22, length: 1 },Snip { offset: 22, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 23, length: 1 },Snip { offset: 23, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::A, closing: Closing::Open, attributes: OptVec::One(("href".to_string(), Some("apis-in-html-documents.html#dynamic-markup-insertion".to_string()))) }).localize(Snip { offset: 24, length: 98 },Snip { offset: 24, length: 98 }),
+            ParserEvent::Char(',').localize(Snip { offset: 122, length: 1 },Snip { offset: 122, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 123, length: 1 },Snip { offset: 123, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 124, length: 1 },Snip { offset: 124, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 125, length: 1 },Snip { offset: 125, length: 1 }),
+            ParserEvent::Char('g').localize(Snip { offset: 126, length: 1 },Snip { offset: 126, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 127, length: 1 },Snip { offset: 127, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 128, length: 1 },Snip { offset: 128, length: 1 }),
+            ParserEvent::Char('u').localize(Snip { offset: 129, length: 1 },Snip { offset: 129, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 130, length: 1 },Snip { offset: 130, length: 1 }),
+            ParserEvent::Char('i').localize(Snip { offset: 131, length: 1 },Snip { offset: 131, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 132, length: 1 },Snip { offset: 132, length: 1 }),
+            ParserEvent::Char('g').localize(Snip { offset: 133, length: 1 },Snip { offset: 133, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 134, length: 1 },Snip { offset: 134, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 135, length: 1 },Snip { offset: 135, length: 1 }),
+            ParserEvent::Char('h').localize(Snip { offset: 136, length: 1 },Snip { offset: 136, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 137, length: 1 },Snip { offset: 137, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 138, length: 1 },Snip { offset: 138, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::Code, closing: Closing::Open, attributes: OptVec::None }).localize(Snip { offset: 139, length: 33 },Snip { offset: 139, length: 33 }),
+            ParserEvent::Parsed(Tag { name: TagName::A, closing: Closing::Open, attributes: OptVec::One(("href".to_string(), Some("apis-in-html-documents.html#dom-document-write".to_string()))) }).localize(Snip { offset: 172, length: 57 },Snip { offset: 172, length: 57 }),
+            ParserEvent::Char('d').localize(Snip { offset: 229, length: 1 },Snip { offset: 229, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 230, length: 1 },Snip { offset: 230, length: 1 }),
+            ParserEvent::Char('c').localize(Snip { offset: 231, length: 1 },Snip { offset: 231, length: 1 }),
+            ParserEvent::Char('u').localize(Snip { offset: 232, length: 1 },Snip { offset: 232, length: 1 }),
+            ParserEvent::Char('m').localize(Snip { offset: 233, length: 1 },Snip { offset: 233, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 234, length: 1 },Snip { offset: 234, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 235, length: 1 },Snip { offset: 235, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 236, length: 1 },Snip { offset: 236, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 237, length: 1 },Snip { offset: 237, length: 1 }),
+            ParserEvent::Char('w').localize(Snip { offset: 238, length: 1 },Snip { offset: 238, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 239, length: 1 },Snip { offset: 239, length: 1 }),
+            ParserEvent::Char('i').localize(Snip { offset: 240, length: 1 },Snip { offset: 240, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 241, length: 1 },Snip { offset: 241, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 242, length: 1 },Snip { offset: 242, length: 1 }),
+            ParserEvent::Char('(').localize(Snip { offset: 243, length: 1 },Snip { offset: 243, length: 1 }),
+            ParserEvent::Char(')').localize(Snip { offset: 244, length: 1 },Snip { offset: 244, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::A, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 245, length: 4 },Snip { offset: 245, length: 4 }),
+            ParserEvent::Parsed(Tag { name: TagName::Code, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 249, length: 7 },Snip { offset: 249, length: 7 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 256, length: 1 },Snip { offset: 256, length: 1 }),
+            ParserEvent::Char('A').localize(Snip { offset: 257, length: 1 },Snip { offset: 257, length: 1 }),
+            ParserEvent::Char('P').localize(Snip { offset: 258, length: 1 },Snip { offset: 258, length: 1 }),
+            ParserEvent::Char('I').localize(Snip { offset: 259, length: 1 },Snip { offset: 259, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 260, length: 1 },Snip { offset: 260, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::P, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 261, length: 4 },Snip { offset: 261, length: 4 }),
+            ParserEvent::Char('\n').localize(Snip { offset: 265, length: 1 },Snip { offset: 265, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 266, length: 1 },Snip { offset: 266, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 267, length: 1 },Snip { offset: 267, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::P, closing: Closing::Open, attributes: OptVec::None }).localize(Snip { offset: 268, length: 3 },Snip { offset: 268, length: 3 }),
+            ParserEvent::Parsed(Tag { name: TagName::Img, closing: Closing::Void, attributes: OptVec::One(("alt".to_string(), Some("".to_string()))) }).localize(Snip { offset: 271, length: 107 },Snip { offset: 271, length: 107 }),
+            ParserEvent::Parsed(Tag { name: TagName::P, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 378, length: 4 },Snip { offset: 378, length: 4 }),
+            ParserEvent::Char('\n').localize(Snip { offset: 382, length: 1 },Snip { offset: 382, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 383, length: 1 },Snip { offset: 383, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 384, length: 1 },Snip { offset: 384, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::P, closing: Closing::Open, attributes: OptVec::None }).localize(Snip { offset: 385, length: 22 },Snip { offset: 385, length: 22 }),
+            ParserEvent::Char('T').localize(Snip { offset: 407, length: 1 },Snip { offset: 407, length: 1 }),
+            ParserEvent::Char('h').localize(Snip { offset: 408, length: 1 },Snip { offset: 408, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 409, length: 1 },Snip { offset: 409, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 410, length: 1 },Snip { offset: 410, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 411, length: 1 },Snip { offset: 411, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 412, length: 1 },Snip { offset: 412, length: 1 }),
+            ParserEvent::Char('i').localize(Snip { offset: 413, length: 1 },Snip { offset: 413, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 414, length: 1 },Snip { offset: 414, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 415, length: 1 },Snip { offset: 415, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 416, length: 1 },Snip { offset: 416, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 417, length: 1 },Snip { offset: 417, length: 1 }),
+            ParserEvent::Char('l').localize(Snip { offset: 418, length: 1 },Snip { offset: 418, length: 1 }),
+            ParserEvent::Char('y').localize(Snip { offset: 419, length: 1 },Snip { offset: 419, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 420, length: 1 },Snip { offset: 420, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 421, length: 1 },Snip { offset: 421, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 422, length: 1 },Snip { offset: 422, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 423, length: 1 },Snip { offset: 423, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 424, length: 1 },Snip { offset: 424, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 425, length: 1 },Snip { offset: 425, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 426, length: 1 },Snip { offset: 426, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 427, length: 1 },Snip { offset: 427, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 428, length: 1 },Snip { offset: 428, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 429, length: 1 },Snip { offset: 429, length: 1 }),
+            ParserEvent::Char('f').localize(Snip { offset: 430, length: 1 },Snip { offset: 430, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 431, length: 1 },Snip { offset: 431, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 432, length: 1 },Snip { offset: 432, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 433, length: 1 },Snip { offset: 433, length: 1 }),
+            ParserEvent::Char('a').localize(Snip { offset: 434, length: 1 },Snip { offset: 434, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 435, length: 1 },Snip { offset: 435, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 436, length: 1 },Snip { offset: 436, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 437, length: 1 },Snip { offset: 437, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 438, length: 1 },Snip { offset: 438, length: 1 }),
+            ParserEvent::Char('f').localize(Snip { offset: 439, length: 1 },Snip { offset: 439, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 440, length: 1 },Snip { offset: 440, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 441, length: 1 },Snip { offset: 441, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 442, length: 1 },Snip { offset: 442, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 443, length: 1 },Snip { offset: 443, length: 1 }),
+            ParserEvent::Char('h').localize(Snip { offset: 444, length: 1 },Snip { offset: 444, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 445, length: 1 },Snip { offset: 445, length: 1 }),
+            ParserEvent::Char('\n').localize(Snip { offset: 446, length: 1 },Snip { offset: 446, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 447, length: 1 },Snip { offset: 447, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 448, length: 1 },Snip { offset: 448, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 449, length: 1 },Snip { offset: 449, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 450, length: 1 },Snip { offset: 450, length: 1 }),
+            ParserEvent::Char('k').localize(Snip { offset: 451, length: 1 },Snip { offset: 451, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 452, length: 1 },Snip { offset: 452, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 453, length: 1 },Snip { offset: 453, length: 1 }),
+            ParserEvent::Char('i').localize(Snip { offset: 454, length: 1 },Snip { offset: 454, length: 1 }),
+            ParserEvent::Char('z').localize(Snip { offset: 455, length: 1 },Snip { offset: 455, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 456, length: 1 },Snip { offset: 456, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 457, length: 1 },Snip { offset: 457, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 458, length: 1 },Snip { offset: 458, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 459, length: 1 },Snip { offset: 459, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 460, length: 1 },Snip { offset: 460, length: 1 }),
+            ParserEvent::Char('a').localize(Snip { offset: 461, length: 1 },Snip { offset: 461, length: 1 }),
+            ParserEvent::Char('g').localize(Snip { offset: 462, length: 1 },Snip { offset: 462, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 463, length: 1 },Snip { offset: 463, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 464, length: 1 },Snip { offset: 464, length: 1 }),
+            ParserEvent::Char('a').localize(Snip { offset: 465, length: 1 },Snip { offset: 465, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 466, length: 1 },Snip { offset: 466, length: 1 }),
+            ParserEvent::Char('d').localize(Snip { offset: 467, length: 1 },Snip { offset: 467, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 468, length: 1 },Snip { offset: 468, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 469, length: 1 },Snip { offset: 469, length: 1 }),
+            ParserEvent::Char('h').localize(Snip { offset: 470, length: 1 },Snip { offset: 470, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 471, length: 1 },Snip { offset: 471, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 472, length: 1 },Snip { offset: 472, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 473, length: 1 },Snip { offset: 473, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 474, length: 1 },Snip { offset: 474, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 475, length: 1 },Snip { offset: 475, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 476, length: 1 },Snip { offset: 476, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 477, length: 1 },Snip { offset: 477, length: 1 }),
+            ParserEvent::Char('c').localize(Snip { offset: 478, length: 1 },Snip { offset: 478, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 479, length: 1 },Snip { offset: 479, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 480, length: 1 },Snip { offset: 480, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 481, length: 1 },Snip { offset: 481, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 482, length: 1 },Snip { offset: 482, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 483, length: 1 },Snip { offset: 483, length: 1 }),
+            ParserEvent::Char('u').localize(Snip { offset: 484, length: 1 },Snip { offset: 484, length: 1 }),
+            ParserEvent::Char('c').localize(Snip { offset: 485, length: 1 },Snip { offset: 485, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 486, length: 1 },Snip { offset: 486, length: 1 }),
+            ParserEvent::Char('i').localize(Snip { offset: 487, length: 1 },Snip { offset: 487, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 488, length: 1 },Snip { offset: 488, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 489, length: 1 },Snip { offset: 489, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 490, length: 1 },Snip { offset: 490, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 491, length: 1 },Snip { offset: 491, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 492, length: 1 },Snip { offset: 492, length: 1 }),
+            ParserEvent::Char('a').localize(Snip { offset: 493, length: 1 },Snip { offset: 493, length: 1 }),
+            ParserEvent::Char('g').localize(Snip { offset: 494, length: 1 },Snip { offset: 494, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 495, length: 1 },Snip { offset: 495, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 496, length: 1 },Snip { offset: 496, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 497, length: 1 },Snip { offset: 497, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 498, length: 1 },Snip { offset: 498, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::P, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 499, length: 4 },Snip { offset: 499, length: 4 }),
+        ].into_iter();
+
         while let Some(local_event) = parser.next_event(&mut src).unwrap() {
-            println!("{:?}",local_event);
+            //let (local,event) = local_event.into_inner();
+            //println!("ParserEvent::{:?}.localize({:?},{:?}),",event,local.chars(),local.bytes());
+            match res_iter.next() {
+                Some(ev) => {
+                    println!("Parser: {:?}",local_event);
+                    println!("Result: {:?}",ev);
+                    assert_eq!(local_event,ev);
+                },
+                None => {
+                    panic!("parser has more events then test result");
+                },
+            }
         }
-        panic!();
     }
 
     #[test]
+    fn a_img_2() {        
+        let mut src = "
+<p>In the common case, <a href=\"apis-in-html-documents.html#dynamic-markup-insertion\" title=\"dynamic markup
+  insertion\">, e.g. using the <code title=\"dom-document-write\"><a href=\"apis-in-html-documents.html#dom-document-write\">document.write()</a></code> API.</p>
+  <p><img alt=\"\" height=\"554\" src=\"https://dev.w3.org/html5/spec/images/parsing-model-overview.png\" width=\"427\"></p>
+  <p id=\"nestedParsing\">There is only one set of states for the
+  tokenizer stage and the tree construction stage...</p>".into_source().into_separator();
+        let mut parser = Builder::new()
+            .with_attribute(TagName::A,"href")
+            .with_attribute(TagName::Img,"alt")
+            .create();
+
+        let mut res_iter = [
+            ParserEvent::Breaker(Breaker::Sentence).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::P, closing: Closing::Open, attributes: OptVec::None }).localize(Snip { offset: 1, length: 3 },Snip { offset: 1, length: 3 }),
+            ParserEvent::Char('I').localize(Snip { offset: 4, length: 1 },Snip { offset: 4, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 5, length: 1 },Snip { offset: 5, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 6, length: 1 },Snip { offset: 6, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 7, length: 1 },Snip { offset: 7, length: 1 }),
+            ParserEvent::Char('h').localize(Snip { offset: 8, length: 1 },Snip { offset: 8, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 9, length: 1 },Snip { offset: 9, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 10, length: 1 },Snip { offset: 10, length: 1 }),
+            ParserEvent::Char('c').localize(Snip { offset: 11, length: 1 },Snip { offset: 11, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 12, length: 1 },Snip { offset: 12, length: 1 }),
+            ParserEvent::Char('m').localize(Snip { offset: 13, length: 1 },Snip { offset: 13, length: 1 }),
+            ParserEvent::Char('m').localize(Snip { offset: 14, length: 1 },Snip { offset: 14, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 15, length: 1 },Snip { offset: 15, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 16, length: 1 },Snip { offset: 16, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 17, length: 1 },Snip { offset: 17, length: 1 }),
+            ParserEvent::Char('c').localize(Snip { offset: 18, length: 1 },Snip { offset: 18, length: 1 }),
+            ParserEvent::Char('a').localize(Snip { offset: 19, length: 1 },Snip { offset: 19, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 20, length: 1 },Snip { offset: 20, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 21, length: 1 },Snip { offset: 21, length: 1 }),
+            ParserEvent::Char(',').localize(Snip { offset: 22, length: 1 },Snip { offset: 22, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 23, length: 1 },Snip { offset: 23, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::A, closing: Closing::Open, attributes: OptVec::One(("href".to_string(), Some("apis-in-html-documents.html#dynamic-markup-insertion".to_string()))) }).localize(Snip { offset: 24, length: 98 },Snip { offset: 24, length: 98 }),
+            ParserEvent::Char(',').localize(Snip { offset: 122, length: 1 },Snip { offset: 122, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 123, length: 1 },Snip { offset: 123, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 124, length: 1 },Snip { offset: 124, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 125, length: 1 },Snip { offset: 125, length: 1 }),
+            ParserEvent::Char('g').localize(Snip { offset: 126, length: 1 },Snip { offset: 126, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 127, length: 1 },Snip { offset: 127, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 128, length: 1 },Snip { offset: 128, length: 1 }),
+            ParserEvent::Char('u').localize(Snip { offset: 129, length: 1 },Snip { offset: 129, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 130, length: 1 },Snip { offset: 130, length: 1 }),
+            ParserEvent::Char('i').localize(Snip { offset: 131, length: 1 },Snip { offset: 131, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 132, length: 1 },Snip { offset: 132, length: 1 }),
+            ParserEvent::Char('g').localize(Snip { offset: 133, length: 1 },Snip { offset: 133, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 134, length: 1 },Snip { offset: 134, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 135, length: 1 },Snip { offset: 135, length: 1 }),
+            ParserEvent::Char('h').localize(Snip { offset: 136, length: 1 },Snip { offset: 136, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 137, length: 1 },Snip { offset: 137, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 138, length: 1 },Snip { offset: 138, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::Code, closing: Closing::Open, attributes: OptVec::None }).localize(Snip { offset: 139, length: 33 },Snip { offset: 139, length: 33 }),
+            ParserEvent::Parsed(Tag { name: TagName::A, closing: Closing::Open, attributes: OptVec::One(("href".to_string(), Some("apis-in-html-documents.html#dom-document-write".to_string()))) }).localize(Snip { offset: 172, length: 57 },Snip { offset: 172, length: 57 }),
+            ParserEvent::Char('d').localize(Snip { offset: 229, length: 1 },Snip { offset: 229, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 230, length: 1 },Snip { offset: 230, length: 1 }),
+            ParserEvent::Char('c').localize(Snip { offset: 231, length: 1 },Snip { offset: 231, length: 1 }),
+            ParserEvent::Char('u').localize(Snip { offset: 232, length: 1 },Snip { offset: 232, length: 1 }),
+            ParserEvent::Char('m').localize(Snip { offset: 233, length: 1 },Snip { offset: 233, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 234, length: 1 },Snip { offset: 234, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 235, length: 1 },Snip { offset: 235, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 236, length: 1 },Snip { offset: 236, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 237, length: 1 },Snip { offset: 237, length: 1 }),
+            ParserEvent::Char('w').localize(Snip { offset: 238, length: 1 },Snip { offset: 238, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 239, length: 1 },Snip { offset: 239, length: 1 }),
+            ParserEvent::Char('i').localize(Snip { offset: 240, length: 1 },Snip { offset: 240, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 241, length: 1 },Snip { offset: 241, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 242, length: 1 },Snip { offset: 242, length: 1 }),
+            ParserEvent::Char('(').localize(Snip { offset: 243, length: 1 },Snip { offset: 243, length: 1 }),
+            ParserEvent::Char(')').localize(Snip { offset: 244, length: 1 },Snip { offset: 244, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::A, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 245, length: 4 },Snip { offset: 245, length: 4 }),
+            ParserEvent::Parsed(Tag { name: TagName::Code, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 249, length: 7 },Snip { offset: 249, length: 7 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 256, length: 1 },Snip { offset: 256, length: 1 }),
+            ParserEvent::Char('A').localize(Snip { offset: 257, length: 1 },Snip { offset: 257, length: 1 }),
+            ParserEvent::Char('P').localize(Snip { offset: 258, length: 1 },Snip { offset: 258, length: 1 }),
+            ParserEvent::Char('I').localize(Snip { offset: 259, length: 1 },Snip { offset: 259, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 260, length: 1 },Snip { offset: 260, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::P, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 261, length: 4 },Snip { offset: 261, length: 4 }),
+            ParserEvent::Breaker(Breaker::Sentence).localize(Snip { offset: 265, length: 1 },Snip { offset: 265, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::P, closing: Closing::Open, attributes: OptVec::None }).localize(Snip { offset: 268, length: 3 },Snip { offset: 268, length: 3 }),
+            ParserEvent::Parsed(Tag { name: TagName::Img, closing: Closing::Void, attributes: OptVec::One(("alt".to_string(), Some("".to_string()))) }).localize(Snip { offset: 271, length: 107 },Snip { offset: 271, length: 107 }),
+            ParserEvent::Parsed(Tag { name: TagName::P, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 378, length: 4 },Snip { offset: 378, length: 4 }),
+            ParserEvent::Breaker(Breaker::Sentence).localize(Snip { offset: 382, length: 1 },Snip { offset: 382, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::P, closing: Closing::Open, attributes: OptVec::None }).localize(Snip { offset: 385, length: 22 },Snip { offset: 385, length: 22 }),
+            ParserEvent::Char('T').localize(Snip { offset: 407, length: 1 },Snip { offset: 407, length: 1 }),
+            ParserEvent::Char('h').localize(Snip { offset: 408, length: 1 },Snip { offset: 408, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 409, length: 1 },Snip { offset: 409, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 410, length: 1 },Snip { offset: 410, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 411, length: 1 },Snip { offset: 411, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 412, length: 1 },Snip { offset: 412, length: 1 }),
+            ParserEvent::Char('i').localize(Snip { offset: 413, length: 1 },Snip { offset: 413, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 414, length: 1 },Snip { offset: 414, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 415, length: 1 },Snip { offset: 415, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 416, length: 1 },Snip { offset: 416, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 417, length: 1 },Snip { offset: 417, length: 1 }),
+            ParserEvent::Char('l').localize(Snip { offset: 418, length: 1 },Snip { offset: 418, length: 1 }),
+            ParserEvent::Char('y').localize(Snip { offset: 419, length: 1 },Snip { offset: 419, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 420, length: 1 },Snip { offset: 420, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 421, length: 1 },Snip { offset: 421, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 422, length: 1 },Snip { offset: 422, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 423, length: 1 },Snip { offset: 423, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 424, length: 1 },Snip { offset: 424, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 425, length: 1 },Snip { offset: 425, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 426, length: 1 },Snip { offset: 426, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 427, length: 1 },Snip { offset: 427, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 428, length: 1 },Snip { offset: 428, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 429, length: 1 },Snip { offset: 429, length: 1 }),
+            ParserEvent::Char('f').localize(Snip { offset: 430, length: 1 },Snip { offset: 430, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 431, length: 1 },Snip { offset: 431, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 432, length: 1 },Snip { offset: 432, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 433, length: 1 },Snip { offset: 433, length: 1 }),
+            ParserEvent::Char('a').localize(Snip { offset: 434, length: 1 },Snip { offset: 434, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 435, length: 1 },Snip { offset: 435, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 436, length: 1 },Snip { offset: 436, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 437, length: 1 },Snip { offset: 437, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 438, length: 1 },Snip { offset: 438, length: 1 }),
+            ParserEvent::Char('f').localize(Snip { offset: 439, length: 1 },Snip { offset: 439, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 440, length: 1 },Snip { offset: 440, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 441, length: 1 },Snip { offset: 441, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 442, length: 1 },Snip { offset: 442, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 443, length: 1 },Snip { offset: 443, length: 1 }),
+            ParserEvent::Char('h').localize(Snip { offset: 444, length: 1 },Snip { offset: 444, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 445, length: 1 },Snip { offset: 445, length: 1 }),
+            ParserEvent::Breaker(Breaker::Sentence).localize(Snip { offset: 446, length: 1 },Snip { offset: 446, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 449, length: 1 },Snip { offset: 449, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 450, length: 1 },Snip { offset: 450, length: 1 }),
+            ParserEvent::Char('k').localize(Snip { offset: 451, length: 1 },Snip { offset: 451, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 452, length: 1 },Snip { offset: 452, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 453, length: 1 },Snip { offset: 453, length: 1 }),
+            ParserEvent::Char('i').localize(Snip { offset: 454, length: 1 },Snip { offset: 454, length: 1 }),
+            ParserEvent::Char('z').localize(Snip { offset: 455, length: 1 },Snip { offset: 455, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 456, length: 1 },Snip { offset: 456, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 457, length: 1 },Snip { offset: 457, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 458, length: 1 },Snip { offset: 458, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 459, length: 1 },Snip { offset: 459, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 460, length: 1 },Snip { offset: 460, length: 1 }),
+            ParserEvent::Char('a').localize(Snip { offset: 461, length: 1 },Snip { offset: 461, length: 1 }),
+            ParserEvent::Char('g').localize(Snip { offset: 462, length: 1 },Snip { offset: 462, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 463, length: 1 },Snip { offset: 463, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 464, length: 1 },Snip { offset: 464, length: 1 }),
+            ParserEvent::Char('a').localize(Snip { offset: 465, length: 1 },Snip { offset: 465, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 466, length: 1 },Snip { offset: 466, length: 1 }),
+            ParserEvent::Char('d').localize(Snip { offset: 467, length: 1 },Snip { offset: 467, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 468, length: 1 },Snip { offset: 468, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 469, length: 1 },Snip { offset: 469, length: 1 }),
+            ParserEvent::Char('h').localize(Snip { offset: 470, length: 1 },Snip { offset: 470, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 471, length: 1 },Snip { offset: 471, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 472, length: 1 },Snip { offset: 472, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 473, length: 1 },Snip { offset: 473, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 474, length: 1 },Snip { offset: 474, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 475, length: 1 },Snip { offset: 475, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 476, length: 1 },Snip { offset: 476, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 477, length: 1 },Snip { offset: 477, length: 1 }),
+            ParserEvent::Char('c').localize(Snip { offset: 478, length: 1 },Snip { offset: 478, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 479, length: 1 },Snip { offset: 479, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 480, length: 1 },Snip { offset: 480, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 481, length: 1 },Snip { offset: 481, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 482, length: 1 },Snip { offset: 482, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 483, length: 1 },Snip { offset: 483, length: 1 }),
+            ParserEvent::Char('u').localize(Snip { offset: 484, length: 1 },Snip { offset: 484, length: 1 }),
+            ParserEvent::Char('c').localize(Snip { offset: 485, length: 1 },Snip { offset: 485, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 486, length: 1 },Snip { offset: 486, length: 1 }),
+            ParserEvent::Char('i').localize(Snip { offset: 487, length: 1 },Snip { offset: 487, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 488, length: 1 },Snip { offset: 488, length: 1 }),
+            ParserEvent::Char('n').localize(Snip { offset: 489, length: 1 },Snip { offset: 489, length: 1 }),
+            ParserEvent::Breaker(Breaker::Word).localize(Snip { offset: 490, length: 1 },Snip { offset: 490, length: 1 }),
+            ParserEvent::Char('s').localize(Snip { offset: 491, length: 1 },Snip { offset: 491, length: 1 }),
+            ParserEvent::Char('t').localize(Snip { offset: 492, length: 1 },Snip { offset: 492, length: 1 }),
+            ParserEvent::Char('a').localize(Snip { offset: 493, length: 1 },Snip { offset: 493, length: 1 }),
+            ParserEvent::Char('g').localize(Snip { offset: 494, length: 1 },Snip { offset: 494, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 495, length: 1 },Snip { offset: 495, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 496, length: 1 },Snip { offset: 496, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 497, length: 1 },Snip { offset: 497, length: 1 }),
+            ParserEvent::Char('.').localize(Snip { offset: 498, length: 1 },Snip { offset: 498, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::P, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 499, length: 4 },Snip { offset: 499, length: 4 }),
+        ].into_iter();
+
+        while let Some(local_event) = parser.next_event(&mut src).unwrap() {
+            //let (local,event) = local_event.into_inner();
+            //println!("ParserEvent::{:?}.localize({:?},{:?}),",event,local.chars(),local.bytes());
+            match res_iter.next() {
+                Some(ev) => {
+                    println!("Parser: {:?}",local_event);
+                    println!("Result: {:?}",ev);
+                    assert_eq!(local_event,ev);
+                },
+                None => {
+                    panic!("parser has more events then test result");
+                },
+            }
+        }
+    }
+
+    /*#[test]
     fn basic_pipe() {
         let mut src = "<h1>Hello, world!</h1>Привет, мир, &#x2<wbr>764;!"
             .into_source()
-            .map(Builder::new().create());
+            .pipe(Builder::new().create().piped(|t: Tag| {
+                // skip all tags
+                Some(SourceEvent::Breaker(Breaker::Word))
+            }));
 
         while let Some(local_se) = src.next_char().unwrap() {
             println!("{:?}",local_se);
@@ -165,13 +583,19 @@ mod tests {
     fn basic_pipe_ent() {
         let mut src = "<h1>Hello, world!</h1>Привет, мир, &#x2<wbr>764;!"
             .into_source()
-            .map(Builder::new().create())
-            .map(crate::entities::Builder::new().create().into_piped());
+            .pipe(crate::tagger::Builder::new().create().piped(|t: Tag| {
+                Some(match t.name {
+                    TagName::Wbr => SourceEvent::Breaker(Breaker::None),
+                    _ => SourceEvent::Breaker(Breaker::Word),
+                })
+            }))
+            .pipe(crate::entities::Builder::new().create().into_piped());
 
         while let Some(local_se) = src.next_char().unwrap() {
             println!("{:?}",local_se);
         }
         panic!();
     }
+     */
         
 }

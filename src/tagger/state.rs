@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     Error, Local, ParserEvent,
-    NextState, InnerState, ParserState,
+    NextResult, Next, StateMachine,
     SourceEvent, Breaker,
 };
 
@@ -176,11 +176,11 @@ fn crate_tag_event(mut tag: ReadTag) -> Result<Local<ParserEvent<Tag>>,Error> {
 }
 
 
-impl ParserState for TaggerState {
+impl StateMachine for TaggerState {
     type Context = TaggerProperties;
     type Data = Tag;
     
-    fn eof(self, props: &TaggerProperties) -> NextState<TaggerState,Tag> {
+    fn eof(self, props: &TaggerProperties) -> NextResult<TaggerState,Tag> {
         // unexpected EOF in TAG
         //fn push_tag_eof(&mut self, begin: Local<char>, current: Local<char>, name: TagName, kind: Kind) -> Result<(),Error> {
         fn push_tag_eof(props: &TaggerProperties)-> Result<(),Error> {
@@ -192,8 +192,8 @@ impl ParserState for TaggerState {
         }
         
         Ok(match self {
-            TaggerState::Init => InnerState::empty(),
-            TaggerState::MayBeTag(tag_char) => InnerState::empty().with_event(tag_char.map(|c| ParserEvent::Char(c))),
+            TaggerState::Init => Next::empty(),
+            TaggerState::MayBeTag(tag_char) => Next::empty().with_event(tag_char.map(|c| ParserEvent::Char(c))),
             TaggerState::SlashedTag{..} |
             TaggerState::TagEnd(..) |
             TaggerState::TagWaitAttrName(..) |
@@ -205,11 +205,11 @@ impl ParserState for TaggerState {
             TaggerState::TagAttrValueQuote(..) |
             TaggerState::TagName{..} => {
                 push_tag_eof(props)?;
-                InnerState::empty()
+                Next::empty()
             },
         })
     }
-    fn next_state(self, local_src: Local<SourceEvent>, props: &TaggerProperties) -> NextState<TaggerState,Tag> {
+    fn next_state(self, local_src: Local<SourceEvent>, props: &TaggerProperties) -> NextResult<TaggerState,Tag> {
         match self {
             TaggerState::Init => init(local_src),
             TaggerState::MayBeTag(tag_char) => may_be_tag(tag_char,local_src),
@@ -227,20 +227,20 @@ impl ParserState for TaggerState {
     }
 }
 
-fn init(local_src: Local<SourceEvent>) -> NextState<TaggerState,Tag> {
+fn init(local_src: Local<SourceEvent>) -> NextResult<TaggerState,Tag> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
             match lc {
-                '<' => InnerState::empty()
+                '<' => Next::empty()
                     .with_state(TaggerState::MayBeTag(local_char)),
-                _ => InnerState::empty()
+                _ => Next::empty()
                     .with_event(local_char.map(|c| ParserEvent::Char(c))),
             }
         },
         SourceEvent::Breaker(b) => match b {
-            Breaker::None => InnerState::empty(),
-            _ => InnerState::empty()
+            Breaker::None => Next::empty(),
+            _ => Next::empty()
                 .with_event(local_src.local(ParserEvent::Breaker(b))),
         },
     })
@@ -253,36 +253,36 @@ const FF: char = '\u{0C}';
 const CR: char = '\u{0D}';
 
 
-fn tag_attr_name(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextState<TaggerState,Tag> {
+fn tag_attr_name(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextResult<TaggerState,Tag> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
             tag.current = local_char;
             match lc {
-                '=' => InnerState::empty().with_state(TaggerState::TagWaitAttrValue(tag)),
-                TAB | LF | FF | CR | ' ' => InnerState::empty().with_state(TaggerState::TagWaitAttrEq(tag)),
+                '=' => Next::empty().with_state(TaggerState::TagWaitAttrValue(tag)),
+                TAB | LF | FF | CR | ' ' => Next::empty().with_state(TaggerState::TagWaitAttrEq(tag)),
                 '/' => {
                     tag.attr_flush_no_value();
-                    InnerState::empty().with_state(TaggerState::TagWaitAttrName(tag))
+                    Next::empty().with_state(TaggerState::TagWaitAttrName(tag))
                 },
                 '>' => {
                     tag.attr_flush_no_value();
-                    InnerState::empty().with_event(crate_tag_event(tag)?)
+                    Next::empty().with_event(crate_tag_event(tag)?)
                 },
                 c @ _ => {
                     tag.attr_name_ascii_lowercase(c);
-                    InnerState::empty().with_state(TaggerState::TagAttrName(tag))
+                    Next::empty().with_state(TaggerState::TagAttrName(tag))
                 },
             }
         },
         SourceEvent::Breaker(b) => match b {
-            Breaker::None => InnerState::empty().with_state(TaggerState::TagAttrName(tag)),
-            _ => InnerState::empty().with_state(TaggerState::TagWaitAttrEq(tag)),
+            Breaker::None => Next::empty().with_state(TaggerState::TagAttrName(tag)),
+            _ => Next::empty().with_state(TaggerState::TagWaitAttrEq(tag)),
         },
     })
 }
 
-fn tag_attr_value_apos(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextState<TaggerState,Tag> {
+fn tag_attr_value_apos(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextResult<TaggerState,Tag> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
@@ -290,19 +290,19 @@ fn tag_attr_value_apos(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextS
             match lc {
                 '\'' => {
                     tag.attr_flush();
-                    InnerState::empty().with_state(TaggerState::TagWaitAttrName(tag))
+                    Next::empty().with_state(TaggerState::TagWaitAttrName(tag))
                 },
                 c @ _ => {
                     tag.attr_value_ascii_lowercase(c);
-                    InnerState::empty().with_state(TaggerState::TagAttrValueApos(tag))
+                    Next::empty().with_state(TaggerState::TagAttrValueApos(tag))
                 },
             }
         },
-        SourceEvent::Breaker(_) => InnerState::empty().with_state(TaggerState::TagAttrValueApos(tag)),
+        SourceEvent::Breaker(_) => Next::empty().with_state(TaggerState::TagAttrValueApos(tag)),
     })
 }
 
-fn tag_attr_value_quote(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextState<TaggerState,Tag> {
+fn tag_attr_value_quote(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextResult<TaggerState,Tag> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
@@ -310,19 +310,19 @@ fn tag_attr_value_quote(mut tag: ReadTag, local_src: Local<SourceEvent>) -> Next
             match lc {
                 '"' => {
                     tag.attr_flush();
-                    InnerState::empty().with_state(TaggerState::TagWaitAttrName(tag))
+                    Next::empty().with_state(TaggerState::TagWaitAttrName(tag))
                 },
                 c @ _ => {
                     tag.attr_value_ascii_lowercase(c);
-                    InnerState::empty().with_state(TaggerState::TagAttrValueQuote(tag))
+                    Next::empty().with_state(TaggerState::TagAttrValueQuote(tag))
                 },
             }
         },
-        SourceEvent::Breaker(_) => InnerState::empty().with_state(TaggerState::TagAttrValueQuote(tag)),
+        SourceEvent::Breaker(_) => Next::empty().with_state(TaggerState::TagAttrValueQuote(tag)),
     })
 }
 
-fn tag_attr_value(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextState<TaggerState,Tag> {
+fn tag_attr_value(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextResult<TaggerState,Tag> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
@@ -330,128 +330,128 @@ fn tag_attr_value(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextState<
             match lc {
                 TAB | LF | FF | CR | ' ' => {
                     tag.attr_flush();
-                    InnerState::empty().with_state(TaggerState::TagWaitAttrName(tag))
+                    Next::empty().with_state(TaggerState::TagWaitAttrName(tag))
                 },
                 '>' => {
                     tag.attr_flush();
-                    InnerState::empty().with_event(crate_tag_event(tag)?)
+                    Next::empty().with_event(crate_tag_event(tag)?)
                 },
                 c @ _ => {
                     tag.attr_value_ascii_lowercase(c);
-                    InnerState::empty().with_state(TaggerState::TagAttrValue(tag))
+                    Next::empty().with_state(TaggerState::TagAttrValue(tag))
                 },
             }
         },
         SourceEvent::Breaker(b) => match b {
-            Breaker::None => InnerState::empty().with_state(TaggerState::TagAttrValue(tag)),
+            Breaker::None => Next::empty().with_state(TaggerState::TagAttrValue(tag)),
             _ => {
                 tag.attr_flush();
-                InnerState::empty().with_state(TaggerState::TagWaitAttrName(tag))
+                Next::empty().with_state(TaggerState::TagWaitAttrName(tag))
             },
         },
     })
 }
 
-fn tag_wait_attr_value(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextState<TaggerState,Tag> {
+fn tag_wait_attr_value(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextResult<TaggerState,Tag> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
             tag.current = local_char;
             match lc {
-                TAB | LF | FF | CR | ' ' => InnerState::empty().with_state(TaggerState::TagWaitAttrValue(tag)),
+                TAB | LF | FF | CR | ' ' => Next::empty().with_state(TaggerState::TagWaitAttrValue(tag)),
                 '>' => {
                     tag.attr_flush();
-                    InnerState::empty().with_event(crate_tag_event(tag)?)
+                    Next::empty().with_event(crate_tag_event(tag)?)
                 },
-                '\'' => InnerState::empty().with_state(TaggerState::TagAttrValueApos(tag)),
-                '"' => InnerState::empty().with_state(TaggerState::TagAttrValueQuote(tag)),
+                '\'' => Next::empty().with_state(TaggerState::TagAttrValueApos(tag)),
+                '"' => Next::empty().with_state(TaggerState::TagAttrValueQuote(tag)),
                 c @ _ => {
                     tag.attr_value_ascii_lowercase(c);
-                    InnerState::empty().with_state(TaggerState::TagAttrValue(tag))
+                    Next::empty().with_state(TaggerState::TagAttrValue(tag))
                 },
             }
         },
-        SourceEvent::Breaker(_) => InnerState::empty().with_state(TaggerState::TagWaitAttrValue(tag)),
+        SourceEvent::Breaker(_) => Next::empty().with_state(TaggerState::TagWaitAttrValue(tag)),
     })
 }
 
-fn tag_wait_attr_eq(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextState<TaggerState,Tag> {
+fn tag_wait_attr_eq(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextResult<TaggerState,Tag> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
             tag.current = local_char;
             match lc {
-                '=' => InnerState::empty().with_state(TaggerState::TagWaitAttrValue(tag)),
-                TAB | LF | FF | CR | ' ' => InnerState::empty().with_state(TaggerState::TagWaitAttrEq(tag)),
+                '=' => Next::empty().with_state(TaggerState::TagWaitAttrValue(tag)),
+                TAB | LF | FF | CR | ' ' => Next::empty().with_state(TaggerState::TagWaitAttrEq(tag)),
                 '/' => {
                     tag.attr_flush_no_value();
-                    InnerState::empty().with_state(TaggerState::TagWaitAttrName(tag))
+                    Next::empty().with_state(TaggerState::TagWaitAttrName(tag))
                 },
                 '>' => {
                     tag.attr_flush_no_value();
-                    InnerState::empty().with_event(crate_tag_event(tag)?)
+                    Next::empty().with_event(crate_tag_event(tag)?)
                 },            
                 c @ _ => {
                     tag.attr_flush_no_value();
                     tag.attr_name_ascii_lowercase(c);
-                    InnerState::empty().with_state(TaggerState::TagAttrName(tag))
+                    Next::empty().with_state(TaggerState::TagAttrName(tag))
                 },
             }
         },
-        SourceEvent::Breaker(_) => InnerState::empty().with_state(TaggerState::TagWaitAttrEq(tag)),
+        SourceEvent::Breaker(_) => Next::empty().with_state(TaggerState::TagWaitAttrEq(tag)),
     })
 }
 
-fn tag_wait_attr_name(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextState<TaggerState,Tag> {
+fn tag_wait_attr_name(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextResult<TaggerState,Tag> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
             tag.current = local_char;
             match lc {
-                TAB | LF | FF | CR | ' ' | '/' => InnerState::empty().with_state(TaggerState::TagWaitAttrName(tag)),
-                '>' => InnerState::empty().with_event(crate_tag_event(tag)?),
+                TAB | LF | FF | CR | ' ' | '/' => Next::empty().with_state(TaggerState::TagWaitAttrName(tag)),
+                '>' => Next::empty().with_event(crate_tag_event(tag)?),
                 c @ _ => {
                     tag.attr_clear();
                     tag.attr_name_ascii_lowercase(c);
-                    InnerState::empty().with_state(TaggerState::TagAttrName(tag))
+                    Next::empty().with_state(TaggerState::TagAttrName(tag))
                 },
             }
         },
-        SourceEvent::Breaker(_) => InnerState::empty().with_state(TaggerState::TagWaitAttrName(tag)),
+        SourceEvent::Breaker(_) => Next::empty().with_state(TaggerState::TagWaitAttrName(tag)),
     })
 }
 
-fn tag_end(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextState<TaggerState,Tag> {    
+fn tag_end(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextResult<TaggerState,Tag> {    
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
             tag.current = local_char;
             match lc {
-                '>' => InnerState::empty().with_event(crate_tag_event(tag)?),
-                _ => InnerState::empty().with_state(TaggerState::TagEnd(tag)),
+                '>' => Next::empty().with_event(crate_tag_event(tag)?),
+                _ => Next::empty().with_state(TaggerState::TagEnd(tag)),
             }
         },
-        SourceEvent::Breaker(_) => InnerState::empty().with_state(TaggerState::TagEnd(tag)),
+        SourceEvent::Breaker(_) => Next::empty().with_state(TaggerState::TagEnd(tag)),
     })
 }
 
-fn tag_name(begin: Local<char>, current: Local<char>, local_src: Local<SourceEvent>, kind: Kind, mut name: String, props: &TaggerProperties) -> NextState<TaggerState,Tag> {
+fn tag_name(begin: Local<char>, current: Local<char>, local_src: Local<SourceEvent>, kind: Kind, mut name: String, props: &TaggerProperties) -> NextResult<TaggerState,Tag> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
             match lc {
                 TAB | LF | FF | CR | ' ' => {
                     let (name,attrs) = tag_name_attrs(name,props);                    
-                    InnerState::empty()
+                    Next::empty()
                         .with_state(TaggerState::TagWaitAttrName(ReadTag{ begin, kind, name, current: local_char, tmp_buffer: attrs }))
                 },
                 '>' => {
                     let tag = ReadTag{ begin, current: local_char, name: TagName::from(name), kind, tmp_buffer: None };
-                    InnerState::empty().with_event(crate_tag_event(tag)?)
+                    Next::empty().with_event(crate_tag_event(tag)?)
                 },
                 c @ _ => {           
                     for cc in c.to_lowercase() { name.push(cc); }
-                    InnerState::empty()
+                    Next::empty()
                         .with_state(TaggerState::TagName {
                             begin, kind, name,
                             current: local_char,
@@ -460,11 +460,11 @@ fn tag_name(begin: Local<char>, current: Local<char>, local_src: Local<SourceEve
             }
         },
         SourceEvent::Breaker(b) => match b {
-            Breaker::None => InnerState::empty()
+            Breaker::None => Next::empty()
                 .with_state(TaggerState::TagName { begin, kind, name, current }),
             _ => {
                 let (name,attrs) = tag_name_attrs(name,props);
-                InnerState::empty()
+                Next::empty()
                     .with_state(TaggerState::TagWaitAttrName(ReadTag{ begin, kind, name, current, tmp_buffer: attrs }))
             },
         },
@@ -472,18 +472,18 @@ fn tag_name(begin: Local<char>, current: Local<char>, local_src: Local<SourceEve
 }
 
 
-fn slashed_tag(begin: Local<char>, current: Local<char>, local_src: Local<SourceEvent>) -> NextState<TaggerState,Tag> {
+fn slashed_tag(begin: Local<char>, current: Local<char>, local_src: Local<SourceEvent>) -> NextResult<TaggerState,Tag> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
             match lc {
                 '>' =>  {
                     let tag = ReadTag{ begin, current: local_char, name: TagName::x_from(SpecTag::Slash), kind: Kind::Slash, tmp_buffer: None };
-                    InnerState::empty().with_event(crate_tag_event(tag)?)
+                    Next::empty().with_event(crate_tag_event(tag)?)
                 }
                 c @ _ if c.is_ascii_alphabetic() => {
                     // TODO tag_name: add name coo info
-                    InnerState::empty().with_state(TaggerState::TagName {
+                    Next::empty().with_state(TaggerState::TagName {
                         begin,
                         current: local_char,
                         kind: Kind::Close,
@@ -494,7 +494,7 @@ fn slashed_tag(begin: Local<char>, current: Local<char>, local_src: Local<Source
                         },
                     })
                 },
-                _ => InnerState::empty().with_state(TaggerState::TagEnd(ReadTag {
+                _ => Next::empty().with_state(TaggerState::TagEnd(ReadTag {
                     begin,
                     current: local_char,
                     kind: Kind::Slash,
@@ -503,7 +503,7 @@ fn slashed_tag(begin: Local<char>, current: Local<char>, local_src: Local<Source
                 })),
             }
         },
-        SourceEvent::Breaker(_) => InnerState::empty().with_state(TaggerState::TagEnd(ReadTag {
+        SourceEvent::Breaker(_) => Next::empty().with_state(TaggerState::TagEnd(ReadTag {
             begin,
             current,
             kind: Kind::Slash,
@@ -513,25 +513,25 @@ fn slashed_tag(begin: Local<char>, current: Local<char>, local_src: Local<Source
     })
 }
 
-fn may_be_tag(tag_char: Local<char>, local_src: Local<SourceEvent>) -> NextState<TaggerState,Tag> {
+fn may_be_tag(tag_char: Local<char>, local_src: Local<SourceEvent>) -> NextResult<TaggerState,Tag> {
     Ok(match *local_src.data() {
         SourceEvent::Char(lc) => {
             let local_char = local_src.local(lc);
             match lc {
                 '<' => {
-                    InnerState::empty()
+                    Next::empty()
                         .with_state(TaggerState::MayBeTag(local_char))
                         .with_event(tag_char.map(|c| ParserEvent::Char(c)))
                 },
-                '/' => InnerState::empty().with_state(TaggerState::SlashedTag{ begin: tag_char, current: local_char }),
-                '!' => InnerState::empty().with_state(TaggerState::TagEnd(ReadTag {
+                '/' => Next::empty().with_state(TaggerState::SlashedTag{ begin: tag_char, current: local_char }),
+                '!' => Next::empty().with_state(TaggerState::TagEnd(ReadTag {
                     begin: tag_char,
                     current: local_char,
                     kind: Kind::Excl,
                     name: TagName::x_from(SpecTag::Excl),
                     tmp_buffer: None,
                 })),
-                '?' => InnerState::empty().with_state(TaggerState::TagEnd(ReadTag {
+                '?' => Next::empty().with_state(TaggerState::TagEnd(ReadTag {
                     begin: tag_char,
                     current: local_char,
                     kind: Kind::Quest,
@@ -540,7 +540,7 @@ fn may_be_tag(tag_char: Local<char>, local_src: Local<SourceEvent>) -> NextState
                 })),
                 c @ _ if c.is_ascii_alphabetic() => {
                     // TODO tag_name: add name coo info
-                    InnerState::empty().with_state(TaggerState::TagName {
+                    Next::empty().with_state(TaggerState::TagName {
                         begin: tag_char,
                         current: local_char,
                         kind: Kind::Open,
@@ -551,15 +551,15 @@ fn may_be_tag(tag_char: Local<char>, local_src: Local<SourceEvent>) -> NextState
                         },
                     })
                 },
-                _ => InnerState::empty()
+                _ => Next::empty()
                     .with_event(tag_char.map(|c| ParserEvent::Char(c)))
                     .with_event(local_char.map(|c| ParserEvent::Char(c))),
             }
         },
         SourceEvent::Breaker(b) => match b {
-            Breaker::None => InnerState::empty()
+            Breaker::None => Next::empty()
                 .with_state(TaggerState::MayBeTag(tag_char)),
-            _ => InnerState::empty()
+            _ => Next::empty()
                 .with_event(tag_char.map(|c| ParserEvent::Char(c)))
                 .with_event(local_src.local(ParserEvent::Breaker(b))),
         },
