@@ -63,6 +63,11 @@ impl<E> Local<E> {
             data: inner,
         }
     }
+    pub fn with_shift(mut self, char_offset: usize, byte_offset: usize) -> Local<E> {
+        self.chars.offset += char_offset;
+        self.bytes.offset += byte_offset;
+        self
+    }
 
     pub fn from_segment<T>(begin: Local<E>, end: Local<T>) -> Result<Local<E>,Error> {
         if (begin.chars.offset <= end.chars.offset) && (begin.bytes.offset <= end.bytes.offset) {

@@ -4,10 +4,15 @@ use crate::{
     Error,
 };
 
-
+#[derive(Debug,Clone,Copy,Default,PartialEq,Eq,PartialOrd,Ord,Hash)]
+pub struct Processed {
+    pub chars: usize,
+    pub bytes: usize,
+}
 
 pub trait Source {
     fn next_char(&mut self) -> SourceResult;
+    fn processed(&self) -> Processed;
 }
 
 pub trait IntoSource {
@@ -42,34 +47,93 @@ impl Sourcefy for char {
         SourceEvent::Char(self)
     }
 }
+impl Sourcefy for Breaker {
+    fn sourcefy(self) -> SourceEvent {
+        SourceEvent::Breaker(self)
+    }
+}
 
+impl Breaker {
+    pub fn into_source_as(self, s: &str) -> OptSource {
+        let blen = s.len();
+        let clen = s.chars().count();
+        OptSource::new(self.sourcefy().localize(Snip{ offset: 0, length: clen }, Snip{ offset: 0, length: blen }))
+    }
+}
 
+impl IntoSource for char {
+    type Source = OptSource;
+    fn into_source(self) -> Self::Source {
+        let blen = self.len_utf8();
+        OptSource::new(self.sourcefy().localize(Snip{ offset: 0, length: 1 }, Snip{ offset: 0, length: blen }))
+    }
+}
 
-
-
+pub struct OptSource {
+    source: Option<Local<SourceEvent>>,
+    done: Processed,
+}
+impl OptSource {
+    pub fn new(local_se: Local<SourceEvent>) -> OptSource {
+        OptSource {
+            source: Some(local_se),
+            done: Processed::default(),
+        }
+    }
+}
+impl Source for OptSource {
+    fn next_char(&mut self) -> SourceResult {
+        let r = self.source.take();
+        if let Some(local_se) = &r {
+            self.done.chars += local_se.chars().length;
+            self.done.bytes += local_se.bytes().length;
+        }
+        Ok(r)
+    }
+    fn processed(&self) -> Processed {
+        self.done
+    }
+}
 
 impl<'s> IntoSource for &'s str {
     type Source = StrSource<'s>;
     fn into_source(self) -> Self::Source {
-        StrSource(self.char_indices().enumerate())
+        StrSource::new(self)
     }
 }
 
 impl<'s> IntoSource for &'s String {
     type Source = StrSource<'s>;
     fn into_source(self) -> Self::Source {
-        StrSource(self.char_indices().enumerate())
+        StrSource::new(self as &str)
     }
 }
 
-pub struct StrSource<'s> (std::iter::Enumerate<std::str::CharIndices<'s>>);
+pub struct StrSource<'s> {
+    source: std::iter::Enumerate<std::str::CharIndices<'s>>,
+    done: Processed,
+}
+impl<'s> StrSource<'s> {
+    pub fn new(s: &str) -> StrSource {
+        StrSource {
+            source: s.char_indices().enumerate(),
+            done: Processed::default(),
+        }
+    }
+}
 impl<'s> Source for StrSource<'s> {
     fn next_char(&mut self) -> SourceResult {
-        Ok(self.0.next().map(|(char_index,(byte_index,c))| {
+        Ok(self.source.next().map(|(char_index,(byte_index,c))| {
             let chars = Snip { offset: char_index, length: 1 };
             let bytes = Snip { offset: byte_index, length: c.len_utf8() };
-            c.sourcefy().localize(chars,bytes)
+            let r = c.sourcefy().localize(chars,bytes);
+            self.done.chars += r.chars().length;
+            self.done.bytes += r.bytes().length;
+            r
         }))
+    }
+    fn processed(&self) -> Processed {
+        self.done
     }
 }
 
@@ -99,6 +163,19 @@ pub trait SourceExt: Source + Sized {
             current: None,
         }
     }
+    /*fn shift(self, char_offset: usize, byte_offset: usize) -> Shift<Self> {
+        Shift {
+            source: self,
+            char_offset,
+            byte_offset,
+        }
+    }*/
+    fn chain<S: Source>(self, chained: S) -> Chain<Self,S> {
+        Chain {
+            inner: InnerChain::First(self),
+            second: Some(chained),           
+        }
+    }
 }
 
 
@@ -114,6 +191,9 @@ where S: Source,
 {
     fn next_char(&mut self) -> SourceResult {
         self.parser.next_char(&mut self.source)
+    }
+    fn processed(&self) -> Processed {
+        self.source.processed()
     }
 }
 
@@ -140,6 +220,81 @@ where S: Source,
                 },
                 None => break Ok(None),
             }
+        }
+    }
+    fn processed(&self) -> Processed {
+        self.source.processed()
+    }
+}
+
+struct Shift<S> {
+    source: S,
+    char_offset: usize,
+    byte_offset: usize,
+}
+impl<S> Shift<S> {
+    fn new(source: S, shift: Processed) -> Shift<S> {
+        Shift {
+            source,
+            char_offset: shift.chars,
+            byte_offset: shift.bytes,
+        }
+    }
+}
+impl<S> Source for  Shift<S>
+where S: Source
+{
+    fn next_char(&mut self) -> SourceResult {
+        Ok(match self.source.next_char()? {
+            Some(ev) => Some(ev.with_shift(self.char_offset,self.byte_offset)),
+            None => None,
+        })
+    }
+    fn processed(&self) -> Processed {
+        let mut p = self.source.processed();
+        p.chars += self.char_offset;
+        p.bytes += self.byte_offset;
+        p
+    }
+}
+
+enum InnerChain<S1,S2> {
+    First(S1),
+    Second(Shift<S2>),
+    Done(Processed)
+}
+
+pub struct Chain<S1,S2> {
+    inner: InnerChain<S1,S2>,
+    second: Option<S2>,
+}
+impl<S1,S2> Source for Chain<S1,S2>
+where S1: Source,
+      S2: Source
+{
+    fn next_char(&mut self) -> SourceResult {
+        loop {
+            match &mut self.inner {
+                InnerChain::First(first) => match first.next_char()? {
+                    Some(ev) => break Ok(Some(ev)),
+                    None => match self.second.take() {
+                        Some(second) => self.inner = InnerChain::Second(Shift::new(second,first.processed())),
+                        None => self.inner = InnerChain::Done(first.processed()),
+                    }
+                },
+                InnerChain::Second(second) => match second.next_char()? {
+                    Some(ev) => break Ok(Some(ev)),
+                    None => self.inner = InnerChain::Done(second.processed()),
+                },
+                InnerChain::Done(_) => break Ok(None),
+            }
+        }
+    }
+    fn processed(&self) -> Processed {
+        match &self.inner {
+            InnerChain::First(first) => first.processed(),
+            InnerChain::Second(second) => second.processed(),
+            InnerChain::Done(p) => *p,
         }
     }
 }
@@ -245,6 +400,9 @@ where S: Source
                 },
             }
         }
+    }
+    fn processed(&self) -> Processed {
+        self.source.processed()
     }
 }
 
@@ -353,6 +511,52 @@ mod tests {
     fn basic_breaker_2() {
         let mut src = " &GreaterGreater; &#x09;\n &#128175; &#xFEFF; &#x200d; \n &#x200c; \n &#xf8e6; &#x2764; "
             .into_source()
+            .pipe(crate::entities::Builder::new().create().into_piped())
+            .filter_char(|c| {
+                match c.general_category() {
+                    GeneralCategory::Format if c != '\u{200d}' => None,
+                    GeneralCategory::Unassigned => None,                    
+                    _ if c == '\u{f8e6}' => None,
+                    _ => Some(c),
+                }
+            })
+            .into_separator();
+
+        let mut res_iter = [
+            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
+            SourceEvent::Char('⪢').localize(Snip { offset: 1, length: 16 },Snip { offset: 1, length: 16 }),
+            SourceEvent::Breaker(Breaker::Sentence).localize(Snip { offset: 24, length: 1 },Snip { offset: 24, length: 1 }),
+            SourceEvent::Char('💯').localize(Snip { offset: 26, length: 9 },Snip { offset: 26, length: 9 }),
+            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 44, length: 1 },Snip { offset: 44, length: 1 }),
+            SourceEvent::Char('\u{200d}').localize(Snip { offset: 45, length: 8 },Snip { offset: 45, length: 8 }),
+            SourceEvent::Breaker(Breaker::Paragraph).localize(Snip { offset: 54, length: 12 },Snip { offset: 54, length: 12 }),
+            SourceEvent::Char('❤').localize(Snip { offset: 76, length: 8 },Snip { offset: 76, length: 8 }),
+            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 84, length: 1 },Snip { offset: 84, length: 1 }),
+        ].into_iter();        
+
+        while let Some(local_event) = src.next_char().unwrap() {
+            //let (local,event) = local_event.into_inner();
+            //println!("SourceEvent::{:?}.localize({:?},{:?}),",event,local.chars(),local.bytes());
+            match res_iter.next() {
+                Some(ev) => {
+                    println!("Source: {:?}",local_event);
+                    println!("Result: {:?}",ev);
+                    assert_eq!(local_event,ev);
+                },
+                None => {
+                    panic!("parser has more events then test result");
+                },
+            }
+        }
+    }
+
+
+    #[test]
+    fn chain_1() {
+        let src = " &GreaterGreater; &#x09;\n &#128175; &#xFEFF;";
+        let mut src = src.into_source()
+            .chain(Breaker::Word.into_source_as(" "))
+            .chain("&#x200d; \n &#x200c; \n &#xf8e6; &#x2764; ".into_source())
             .pipe(crate::entities::Builder::new().create().into_piped())
             .filter_char(|c| {
                 match c.general_category() {
