@@ -69,6 +69,16 @@ impl IntoSource for char {
     }
 }
 
+pub struct EmptySource;
+impl Source for EmptySource {
+    fn next_char(&mut self) -> SourceResult {
+        Ok(None)
+    }
+    fn processed(&self) -> Processed {
+        Processed::default()
+    }
+}
+
 pub struct OptSource {
     source: Option<Local<SourceEvent>>,
     done: Processed,
