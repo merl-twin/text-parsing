@@ -51,6 +51,7 @@ pub mod tagger {
     mod parser;
 
     pub use parser::{Builder,TagParser};
+    pub use tags::{Tag,TagName,Closing,SpecTag};
 }
 
 
