@@ -16,6 +16,9 @@ pub use source::{
     SourceExt,
     SourceResult,
     SourceEvent,
+
+    Pipe, Filter, IntoSeparator, Chain,
+    //Shift,
 };
 
 mod parser;
