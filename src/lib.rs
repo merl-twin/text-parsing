@@ -10,6 +10,8 @@ pub use source::{
     Breaker,
     Source, IntoSource,
     StrSource,
+    OptSource,
+    EmptySource,
     SourceExt,
     SourceResult,
     SourceEvent,
