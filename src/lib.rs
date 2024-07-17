@@ -11,6 +11,7 @@ pub use source::{
     Source, IntoSource,
     StrSource,
     OptSource,
+    Processed,
     EmptySource,
     SourceExt,
     SourceResult,
