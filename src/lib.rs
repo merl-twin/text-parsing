@@ -42,7 +42,7 @@ pub mod entities {
     mod parser;
     mod state;
 
-    pub use parser::{Builder,EntityParser};
+    pub use parser::{Builder,EntityParser,PipedEntityParser};
 }
 
 pub mod tagger {
