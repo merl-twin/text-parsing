@@ -33,6 +33,7 @@ pub enum Breaker {
     None,
     Word,
     Sentence,
+    Line,
     Paragraph,
     Section,
 }
@@ -318,17 +319,17 @@ use unicode_properties::{
 
    Mapping some chars into breakers:
 
-      \n      => Breaker::Sentence
+      \n      => Breaker::Line
    
    Chars by unicode properties:
        
       Cc | Zs => Breaker::Word
-      Zl      => Breaker::Sentence                    
+      Zl      => Breaker::Line                   
       Zp      => Breaker::Paragraph
 
    Merging Breakers:
       
-      1) Breaker::Sentence + Breaker::Sentence = Breaker::Paragraph
+      1) Breaker::Line + Breaker::Line = Breaker::Paragraph
       2) Merge by "Inclusiveness": Sentence = sentence breaker + word breaker, etc.
 
 */
@@ -344,7 +345,7 @@ where S: Source
     fn next_char(&mut self) -> SourceResult {
         fn merge_breakers(cur_loc: Local<()>, cur_b: Breaker, nxt_loc: Local<()>, nxt_b: Breaker) -> Result<(Local<()>,Breaker),Error> {
             Ok(match (cur_b,nxt_b) {
-                (Breaker::Sentence,Breaker::Sentence) => {
+                (Breaker::Line,Breaker::Line) => {
                     let loc = Local::from_segment(cur_loc,nxt_loc)?;
                     (loc,Breaker::Paragraph)
                 },
@@ -354,6 +355,8 @@ where S: Source
                 (_,Breaker::Word) => (cur_loc,cur_b),
                 (Breaker::Sentence,_) => (nxt_loc,nxt_b),
                 (_,Breaker::Sentence) => (cur_loc,cur_b),
+                 (Breaker::Line,_) => (nxt_loc,nxt_b),
+                (_,Breaker::Line) => (cur_loc,cur_b),
                 (Breaker::Paragraph,_) => (nxt_loc,nxt_b),
                 (_,Breaker::Paragraph) => (cur_loc,cur_b),
                 (Breaker::Section,Breaker::Section) => (nxt_loc,nxt_b),
@@ -371,11 +374,11 @@ where S: Source
                                 match se {
                                     SourceEvent::Char(c) => {
                                         match c {
-                                            '\n' => SourceEvent::Breaker(Breaker::Sentence),
+                                            '\n' => SourceEvent::Breaker(Breaker::Line),
                                             _ => match c.general_category() {
                                                 GeneralCategory::Control |
                                                 GeneralCategory::SpaceSeparator => SourceEvent::Breaker(Breaker::Word),
-                                                GeneralCategory::LineSeparator => SourceEvent::Breaker(Breaker::Sentence),                    
+                                                GeneralCategory::LineSeparator => SourceEvent::Breaker(Breaker::Line),                    
                                                 GeneralCategory::ParagraphSeparator => SourceEvent::Breaker(Breaker::Paragraph),
                                                 _ => SourceEvent::Char(c),
                                             },
@@ -535,7 +538,7 @@ mod tests {
         let mut res_iter = [
             SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
             SourceEvent::Char('⪢').localize(Snip { offset: 1, length: 16 },Snip { offset: 1, length: 16 }),
-            SourceEvent::Breaker(Breaker::Sentence).localize(Snip { offset: 24, length: 1 },Snip { offset: 24, length: 1 }),
+            SourceEvent::Breaker(Breaker::Line).localize(Snip { offset: 24, length: 1 },Snip { offset: 24, length: 1 }),
             SourceEvent::Char('💯').localize(Snip { offset: 26, length: 9 },Snip { offset: 26, length: 9 }),
             SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 44, length: 1 },Snip { offset: 44, length: 1 }),
             SourceEvent::Char('\u{200d}').localize(Snip { offset: 45, length: 8 },Snip { offset: 45, length: 8 }),
@@ -581,7 +584,7 @@ mod tests {
         let mut res_iter = [
             SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
             SourceEvent::Char('⪢').localize(Snip { offset: 1, length: 16 },Snip { offset: 1, length: 16 }),
-            SourceEvent::Breaker(Breaker::Sentence).localize(Snip { offset: 24, length: 1 },Snip { offset: 24, length: 1 }),
+            SourceEvent::Breaker(Breaker::Line).localize(Snip { offset: 24, length: 1 },Snip { offset: 24, length: 1 }),
             SourceEvent::Char('💯').localize(Snip { offset: 26, length: 9 },Snip { offset: 26, length: 9 }),
             SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 44, length: 1 },Snip { offset: 44, length: 1 }),
             SourceEvent::Char('\u{200d}').localize(Snip { offset: 45, length: 8 },Snip { offset: 45, length: 8 }),

@@ -1,6 +1,6 @@
 
 use opt_struct::OptVec;
-
+use crate::Breaker;
 
 #[derive(Debug,Eq,PartialEq)]
 pub struct Tag {
@@ -10,7 +10,11 @@ pub struct Tag {
     pub attributes: OptVec<(String, Option<String>)>,
 }
 
-
+impl From<Tag> for Breaker {
+    fn from(t: Tag) -> Breaker {
+        (&t.name).into()
+    }
+}
 
 impl Tag {
    /* pub fn from_slice(s: &str) -> Tag {
@@ -568,49 +572,152 @@ impl TagName {
             _ => false,
         }
     }
-    
-    /*fn breaker(&self) -> Breaker {
+}
+
+impl<'s> Into<Breaker> for &'s TagName {   
+    fn into(self) -> Breaker {
         match self {
             TagName::Html |
-            TagName::Title |
             TagName::Head |
-            TagName::Body |
-            TagName::H1 => Breaker::Section,
-            TagName::Hr |
-            TagName::P => Breaker::Paragraph,
+            TagName::Title |
+            TagName::Body => Breaker::Section,            
+            TagName::H1 |
+            TagName::H2 |
+            TagName::H3 |
+            TagName::H4 |
+            TagName::H5 |
+            TagName::H6 |
+            TagName::P => Breaker::Paragraph,            
             TagName::Br |
-            TagName::Td => Breaker::Sentence,
-            TagName::A |
-            TagName::Img |
-            TagName::Sup |
-            TagName::Sub => Breaker::Word,
-            TagName::I |
-            TagName::B |
-            TagName::Wbr => Breaker::None,
-
-            //Styles and Semantics
-            Span => ,
-            Div => ,
-            Style => ,           
+            TagName::Hr => Breaker::Line,
             
-            Header |
-            Hgroup |
-            Footer |
-            Main |
-            Section |
-            Search |
-            Article |
-            Aside |
-            Details |
-            Dialog |
-            Summary |
-            Data => ,
+            //Styles and Semantics
+            TagName::Span => Breaker::None,
+            TagName::Div => Breaker::Sentence,
+            TagName::Style |                      
+            TagName::Header |
+            TagName::Hgroup |
+            TagName::Footer |
+            TagName::Main |
+            TagName::Section |
+            TagName::Search |
+            TagName::Article |
+            TagName::Aside |
+            TagName::Details |
+            TagName::Dialog |
+            TagName::Summary |
+            TagName::Data => Breaker::Section,
+            
+            // Formatting            
+            TagName::Cite |
+            TagName::Code |
+            TagName::Blockquote => Breaker::Sentence,
+            
+            TagName::Font |
+            TagName::Bdi |
+            TagName::Bdo |
+            TagName::Center |            
+            TagName::Del |
+            TagName::Dfn |
+            TagName::Ins |
+            TagName::Kbd |
+            TagName::Mark |
+            TagName::Meter |
+            TagName::Pre |
+            TagName::Progress |
+            TagName::Q |
+            TagName::Rp |
+            TagName::Rt |
+            TagName::Ruby |
+            TagName::Samp |
+            TagName::Tt |
+            TagName::Template |
+            TagName::Time |
+            TagName::Acronym |
+            TagName::Abbr |
+            TagName::Address |
+            TagName::Sub |
+            TagName::Sup |
+            TagName::Var => Breaker::Word,
+
+            TagName::Em |
+            TagName::Big |
+            TagName::B |
+            TagName::I |
+            TagName::S |           
+            TagName::Small |
+            TagName::Strike |
+            TagName::Strong |
+            TagName::U |
+            TagName::Wbr => Breaker::None,
+            
+            //Links
+            TagName::A |
+            TagName::Link |
+            TagName::Nav => Breaker::Word,
+            
+            //Lists
+            TagName::Menu |
+            TagName::Ul |
+            TagName::Ol |
+            TagName::Li |
+            TagName::Dir |
+            TagName::Dl |
+            TagName::Dt |
+            TagName::Dd => Breaker::Sentence,
+            
+            //Tables
+            TagName::Table |
+            TagName::Caption |
+            TagName::Th |
+            TagName::Tr |
+            TagName::Td |
+            TagName::Thead |
+            TagName::Tbody |
+            TagName::Tfoot |
+            TagName::Col |
+            TagName::Colgroup => Breaker::Sentence,
+            
+            //Images
+            TagName::Img => Breaker::Word,
+            TagName::Map |
+            TagName::Area |
+            TagName::Canvas |
+            TagName::Figcaption |
+            TagName::Figure |
+            TagName::Picture |
+            TagName::Svg |
+            
+            // Forms and Input
+            TagName::Form |
+            TagName::Input |
+            TagName::Textarea |
+            TagName::Button |
+            TagName::Select |
+            TagName::Optgroup |
+            TagName::Option |
+            TagName::Label |
+            TagName::Fieldset |
+            TagName::Legend |
+            TagName::Datalist |
+            TagName::Output |
+            
+            // Frames
+            TagName::Frame |
+            TagName::Frameset |
+            TagName::Noframes |
+            TagName::Iframe |
+            
+            //Audio / Video
+            TagName::Audio |
+            TagName::Source |
+            TagName::Track |
+            TagName::Video |
             
             // Meta Info
-            Head |
-            Meta |
-            Base |
-            Basefont => ,
+            TagName::Meta |
+            TagName::Base |
+            TagName::Basefont |
             
             // Programming
             TagName::Script |
@@ -618,10 +725,13 @@ impl TagName {
             TagName::Applet |
             TagName::Embed |
             TagName::Object |
-            TagName::Param => Breaker::Paragraph,
-
-            TagName::X(_) => Breaker::Word,
-            TagName::Other(_name) => Breaker::Word,
+            TagName::Param |
+            
+            TagName::Command |
+            TagName::Keygen |
+            
+            TagName::X(..) |
+            TagName::Other(..) => Breaker::Sentence,
         }
-    }*/
+    }
 }

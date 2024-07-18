@@ -60,10 +60,9 @@ pub trait ParserExt: Parser + Sized {
             into_breaker,
         }
     }
-    fn into_breaker(self, b: Breaker) -> PipeBreaker<Self> {
+    fn into_breaker(self) -> PipeBreaker<Self> {
         PipeBreaker {
             parser: self,
-            breaker: b,
         }
     }
 }
@@ -156,10 +155,10 @@ where P: Parser,
 
 pub struct PipeBreaker<P> {
     parser: P,
-    breaker: Breaker,
 }
 impl<P> PipeParser for PipeBreaker<P>
-where P: Parser
+where P: Parser,
+      P::Data: Into<Breaker>
 {
     fn next_char<S: Source>(&mut self, src: &mut S) -> SourceResult {
         Ok(match self.parser.next_event(src)? {
@@ -168,7 +167,7 @@ where P: Parser
                 let se = match pe {
                     ParserEvent::Char(c) => SourceEvent::Char(c),
                     ParserEvent::Breaker(b) => SourceEvent::Breaker(b),
-                    ParserEvent::Parsed(_) => SourceEvent::Breaker(self.breaker),
+                    ParserEvent::Parsed(d) => SourceEvent::Breaker(d.into()),
                 };
                 Some(local.local(se))
             },
