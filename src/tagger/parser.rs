@@ -166,6 +166,110 @@ mod tests {
         }
     }
 
+    #[test]
+    fn basic_void() {
+        let mut src = "<h1>Hello, world!</h1>Привет, <tag />мир!".into_source();
+        let mut parser = Builder::new().create();
+
+        let mut res_iter = [
+            ParserEvent::Parsed(Tag { name: TagName::H1, closing: Closing::Open, attributes: OptVec::None }).localize(Snip { offset: 0, length: 4 },Snip { offset: 0, length: 4 }),
+            ParserEvent::Char('H').localize(Snip { offset: 4, length: 1 },Snip { offset: 4, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 5, length: 1 },Snip { offset: 5, length: 1 }),
+            ParserEvent::Char('l').localize(Snip { offset: 6, length: 1 },Snip { offset: 6, length: 1 }),
+            ParserEvent::Char('l').localize(Snip { offset: 7, length: 1 },Snip { offset: 7, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 8, length: 1 },Snip { offset: 8, length: 1 }),
+            ParserEvent::Char(',').localize(Snip { offset: 9, length: 1 },Snip { offset: 9, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 10, length: 1 },Snip { offset: 10, length: 1 }),
+            ParserEvent::Char('w').localize(Snip { offset: 11, length: 1 },Snip { offset: 11, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 12, length: 1 },Snip { offset: 12, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 13, length: 1 },Snip { offset: 13, length: 1 }),
+            ParserEvent::Char('l').localize(Snip { offset: 14, length: 1 },Snip { offset: 14, length: 1 }),
+            ParserEvent::Char('d').localize(Snip { offset: 15, length: 1 },Snip { offset: 15, length: 1 }),
+            ParserEvent::Char('!').localize(Snip { offset: 16, length: 1 },Snip { offset: 16, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::H1, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 17, length: 5 },Snip { offset: 17, length: 5 }),
+            ParserEvent::Char('П').localize(Snip { offset: 22, length: 1 },Snip { offset: 22, length: 2 }),
+            ParserEvent::Char('р').localize(Snip { offset: 23, length: 1 },Snip { offset: 24, length: 2 }),
+            ParserEvent::Char('и').localize(Snip { offset: 24, length: 1 },Snip { offset: 26, length: 2 }),
+            ParserEvent::Char('в').localize(Snip { offset: 25, length: 1 },Snip { offset: 28, length: 2 }),
+            ParserEvent::Char('е').localize(Snip { offset: 26, length: 1 },Snip { offset: 30, length: 2 }),
+            ParserEvent::Char('т').localize(Snip { offset: 27, length: 1 },Snip { offset: 32, length: 2 }),
+            ParserEvent::Char(',').localize(Snip { offset: 28, length: 1 },Snip { offset: 34, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 29, length: 1 },Snip { offset: 35, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::Other("tag".to_string()), closing: Closing::Void, attributes: OptVec::None }).localize(Snip { offset: 30, length: 7 },Snip { offset: 36, length: 7 }),
+            ParserEvent::Char('м').localize(Snip { offset: 37, length: 1 },Snip { offset: 43, length: 2 }),
+            ParserEvent::Char('и').localize(Snip { offset: 38, length: 1 },Snip { offset: 45, length: 2 }),
+            ParserEvent::Char('р').localize(Snip { offset: 39, length: 1 },Snip { offset: 47, length: 2 }),
+            ParserEvent::Char('!').localize(Snip { offset: 40, length: 1 },Snip { offset: 49, length: 1 }),
+        ].into_iter();
+
+        while let Some(local_event) = parser.next_event(&mut src).unwrap() {
+            //let (local,event) = local_event.into_inner();
+            //println!("ParserEvent::{:?}.localize({:?},{:?}),",event,local.chars(),local.bytes());
+            match res_iter.next() {
+                Some(ev) => {
+                    println!("Parser: {:?}",local_event);
+                    println!("Result: {:?}",ev);
+                    assert_eq!(local_event,ev);
+                },
+                None => {
+                    panic!("parser has more events then test result");
+                },
+            }
+        }
+    }
+
+    #[test]
+    fn basic_void_2() {
+        let mut src = "<h1>Hello, world!</h1>Привет, <tags/>мир!".into_source();
+        let mut parser = Builder::new().create();
+
+        let mut res_iter = [
+            ParserEvent::Parsed(Tag { name: TagName::H1, closing: Closing::Open, attributes: OptVec::None }).localize(Snip { offset: 0, length: 4 },Snip { offset: 0, length: 4 }),
+            ParserEvent::Char('H').localize(Snip { offset: 4, length: 1 },Snip { offset: 4, length: 1 }),
+            ParserEvent::Char('e').localize(Snip { offset: 5, length: 1 },Snip { offset: 5, length: 1 }),
+            ParserEvent::Char('l').localize(Snip { offset: 6, length: 1 },Snip { offset: 6, length: 1 }),
+            ParserEvent::Char('l').localize(Snip { offset: 7, length: 1 },Snip { offset: 7, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 8, length: 1 },Snip { offset: 8, length: 1 }),
+            ParserEvent::Char(',').localize(Snip { offset: 9, length: 1 },Snip { offset: 9, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 10, length: 1 },Snip { offset: 10, length: 1 }),
+            ParserEvent::Char('w').localize(Snip { offset: 11, length: 1 },Snip { offset: 11, length: 1 }),
+            ParserEvent::Char('o').localize(Snip { offset: 12, length: 1 },Snip { offset: 12, length: 1 }),
+            ParserEvent::Char('r').localize(Snip { offset: 13, length: 1 },Snip { offset: 13, length: 1 }),
+            ParserEvent::Char('l').localize(Snip { offset: 14, length: 1 },Snip { offset: 14, length: 1 }),
+            ParserEvent::Char('d').localize(Snip { offset: 15, length: 1 },Snip { offset: 15, length: 1 }),
+            ParserEvent::Char('!').localize(Snip { offset: 16, length: 1 },Snip { offset: 16, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::H1, closing: Closing::Close, attributes: OptVec::None }).localize(Snip { offset: 17, length: 5 },Snip { offset: 17, length: 5 }),
+            ParserEvent::Char('П').localize(Snip { offset: 22, length: 1 },Snip { offset: 22, length: 2 }),
+            ParserEvent::Char('р').localize(Snip { offset: 23, length: 1 },Snip { offset: 24, length: 2 }),
+            ParserEvent::Char('и').localize(Snip { offset: 24, length: 1 },Snip { offset: 26, length: 2 }),
+            ParserEvent::Char('в').localize(Snip { offset: 25, length: 1 },Snip { offset: 28, length: 2 }),
+            ParserEvent::Char('е').localize(Snip { offset: 26, length: 1 },Snip { offset: 30, length: 2 }),
+            ParserEvent::Char('т').localize(Snip { offset: 27, length: 1 },Snip { offset: 32, length: 2 }),
+            ParserEvent::Char(',').localize(Snip { offset: 28, length: 1 },Snip { offset: 34, length: 1 }),
+            ParserEvent::Char(' ').localize(Snip { offset: 29, length: 1 },Snip { offset: 35, length: 1 }),
+            ParserEvent::Parsed(Tag { name: TagName::Other("tags".to_string()), closing: Closing::Void, attributes: OptVec::None }).localize(Snip { offset: 30, length: 7 },Snip { offset: 36, length: 7 }),
+            ParserEvent::Char('м').localize(Snip { offset: 37, length: 1 },Snip { offset: 43, length: 2 }),
+            ParserEvent::Char('и').localize(Snip { offset: 38, length: 1 },Snip { offset: 45, length: 2 }),
+            ParserEvent::Char('р').localize(Snip { offset: 39, length: 1 },Snip { offset: 47, length: 2 }),
+            ParserEvent::Char('!').localize(Snip { offset: 40, length: 1 },Snip { offset: 49, length: 1 }),
+        ].into_iter();
+
+        while let Some(local_event) = parser.next_event(&mut src).unwrap() {
+            //let (local,event) = local_event.into_inner();
+            //println!("ParserEvent::{:?}.localize({:?},{:?}),",event,local.chars(),local.bytes());
+            match res_iter.next() {
+                Some(ev) => {
+                    println!("Parser: {:?}",local_event);
+                    println!("Result: {:?}",ev);
+                    assert_eq!(local_event,ev);
+                },
+                None => {
+                    panic!("parser has more events then test result");
+                },
+            }
+        }
+    }
+
     
     #[test]
     fn a_img() {        

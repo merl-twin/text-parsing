@@ -5,7 +5,7 @@ pub use locality::{
     Snip, Local, Localize,
 };
 
-mod source;
+pub mod source;
 pub use source::{
     Breaker,
     Source, IntoSource,
@@ -17,11 +17,11 @@ pub use source::{
     SourceResult,
     SourceEvent,
 
-    Pipe, Filter, IntoSeparator, Chain,
+    //Pipe, Filtered, IntoSeparator, Chain,
     //Shift,
 };
 
-mod parser;
+pub mod parser;
 pub use parser::{
     Parser,
     ParserExt,
@@ -29,6 +29,8 @@ pub use parser::{
     IntoPipeParser,
     ParserResult,
     ParserEvent,
+
+    //Filter, Filtered, TryFilter, TryFiltered, IntoBreaker, TryIntoBreaker, PipeBreaker
 };
 
 mod state;

@@ -158,10 +158,10 @@ pub trait SourceExt: Source + Sized {
             parser,
         }
     }
-    fn filter_char<F>(self, filter: F) -> Filter<Self,F>
+    fn filter_char<F>(self, filter: F) -> Filtered<Self,F>
     where F: FnMut(char) -> Option<char>
     {
-        Filter {
+        Filtered {
             source: self,
             filter,
         }
@@ -207,11 +207,11 @@ where S: Source,
     }
 }
 
-pub struct Filter<S,F> {
+pub struct Filtered<S,F> {
     source: S,
     filter: F,
 }
-impl<S,F> Source for Filter<S,F>
+impl<S,F> Source for Filtered<S,F>
 where S: Source,
       F: FnMut(char) -> Option<char>
 {
