@@ -187,9 +187,43 @@ pub trait SourceExt: Source + Sized {
             second: Some(chained),           
         }
     }
+    fn try_map<M>(self, mapper: M) -> Map<Self,M> {
+        Map {
+            source: self,
+            mapper,
+        }
+    }
 }
 
+pub trait Mapper {
+    fn map(&mut self, se: &SourceEvent) -> Option<SourceEvent>;
+}
 
+pub struct Map<S,M>
+{
+    source: S,
+    mapper: M,
+}
+impl<S,M> Source for Map<S,M>
+where S: Source,
+      M: Mapper
+{
+    fn next_char(&mut self) -> SourceResult {
+        Ok(match self.source.next_char()? {
+            Some(local_se) => {
+                let (local,se) = local_se.into_inner();
+                Some(match self.mapper.map(&se) {
+                    Some(se) => local.local(se),
+                    None => local.local(se),
+                })
+            },
+            None => None,
+        })
+    }
+    fn processed(&self) -> Processed {
+        self.source.processed()
+    }
+}
 
 pub struct Pipe<S,P>
 {
