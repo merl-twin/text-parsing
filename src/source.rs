@@ -31,9 +31,10 @@ pub type SourceResult =  Result<Option<Local<SourceEvent>>,Error>;
 // Inclusive: Sentence = sentence breaker + word breaker, etc.
 pub enum Breaker {
     None,
+    Space,
     Word,
-    Sentence,
     Line,
+    Sentence,
     Paragraph,
     Section,
 }
@@ -385,12 +386,14 @@ where S: Source
                 },
                 (Breaker::None,_) => (nxt_loc,nxt_b),
                 (_,Breaker::None) => (cur_loc,cur_b),
+                (Breaker::Space,_) => (nxt_loc,nxt_b),
+                (_,Breaker::Space) => (cur_loc,cur_b),
                 (Breaker::Word,_) => (nxt_loc,nxt_b),
                 (_,Breaker::Word) => (cur_loc,cur_b),
-                (Breaker::Sentence,_) => (nxt_loc,nxt_b),
-                (_,Breaker::Sentence) => (cur_loc,cur_b),
-                 (Breaker::Line,_) => (nxt_loc,nxt_b),
+                (Breaker::Line,_) => (nxt_loc,nxt_b),
                 (_,Breaker::Line) => (cur_loc,cur_b),
+                (Breaker::Sentence,_) => (nxt_loc,nxt_b),
+                (_,Breaker::Sentence) => (cur_loc,cur_b),                
                 (Breaker::Paragraph,_) => (nxt_loc,nxt_b),
                 (_,Breaker::Paragraph) => (cur_loc,cur_b),
                 (Breaker::Section,Breaker::Section) => (nxt_loc,nxt_b),
@@ -411,7 +414,7 @@ where S: Source
                                             '\n' => SourceEvent::Breaker(Breaker::Line),
                                             _ => match c.general_category() {
                                                 GeneralCategory::Control |
-                                                GeneralCategory::SpaceSeparator => SourceEvent::Breaker(Breaker::Word),
+                                                GeneralCategory::SpaceSeparator => SourceEvent::Breaker(Breaker::Space),
                                                 GeneralCategory::LineSeparator => SourceEvent::Breaker(Breaker::Line),                    
                                                 GeneralCategory::ParagraphSeparator => SourceEvent::Breaker(Breaker::Paragraph),
                                                 _ => SourceEvent::Char(c),
@@ -527,15 +530,15 @@ mod tests {
             .into_separator();
 
         let mut res_iter = [
-            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
             SourceEvent::Char('⪢').localize(Snip { offset: 1, length: 16 },Snip { offset: 1, length: 16 }),
-            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 24, length: 1 },Snip { offset: 24, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 24, length: 1 },Snip { offset: 24, length: 1 }),
             SourceEvent::Char('💯').localize(Snip { offset: 25, length: 9 },Snip { offset: 25, length: 9 }),
-            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 43, length: 1 },Snip { offset: 43, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 43, length: 1 },Snip { offset: 43, length: 1 }),
             SourceEvent::Char('\u{200d}').localize(Snip { offset: 44, length: 8 },Snip { offset: 44, length: 8 }),
-            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 70, length: 1 },Snip { offset: 70, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 70, length: 1 },Snip { offset: 70, length: 1 }),
             SourceEvent::Char('❤').localize(Snip { offset: 71, length: 8 },Snip { offset: 71, length: 8 }),
-            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 79, length: 1 },Snip { offset: 79, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 79, length: 1 },Snip { offset: 79, length: 1 }),
         ].into_iter();        
 
         while let Some(local_event) = src.next_char().unwrap() {
@@ -570,15 +573,15 @@ mod tests {
             .into_separator();
 
         let mut res_iter = [
-            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
             SourceEvent::Char('⪢').localize(Snip { offset: 1, length: 16 },Snip { offset: 1, length: 16 }),
             SourceEvent::Breaker(Breaker::Line).localize(Snip { offset: 24, length: 1 },Snip { offset: 24, length: 1 }),
             SourceEvent::Char('💯').localize(Snip { offset: 26, length: 9 },Snip { offset: 26, length: 9 }),
-            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 44, length: 1 },Snip { offset: 44, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 44, length: 1 },Snip { offset: 44, length: 1 }),
             SourceEvent::Char('\u{200d}').localize(Snip { offset: 45, length: 8 },Snip { offset: 45, length: 8 }),
             SourceEvent::Breaker(Breaker::Paragraph).localize(Snip { offset: 54, length: 12 },Snip { offset: 54, length: 12 }),
             SourceEvent::Char('❤').localize(Snip { offset: 76, length: 8 },Snip { offset: 76, length: 8 }),
-            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 84, length: 1 },Snip { offset: 84, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 84, length: 1 },Snip { offset: 84, length: 1 }),
         ].into_iter();        
 
         while let Some(local_event) = src.next_char().unwrap() {
@@ -616,7 +619,7 @@ mod tests {
             .into_separator();
 
         let mut res_iter = [
-            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
             SourceEvent::Char('⪢').localize(Snip { offset: 1, length: 16 },Snip { offset: 1, length: 16 }),
             SourceEvent::Breaker(Breaker::Line).localize(Snip { offset: 24, length: 1 },Snip { offset: 24, length: 1 }),
             SourceEvent::Char('💯').localize(Snip { offset: 26, length: 9 },Snip { offset: 26, length: 9 }),
@@ -624,7 +627,7 @@ mod tests {
             SourceEvent::Char('\u{200d}').localize(Snip { offset: 45, length: 8 },Snip { offset: 45, length: 8 }),
             SourceEvent::Breaker(Breaker::Paragraph).localize(Snip { offset: 54, length: 12 },Snip { offset: 54, length: 12 }),
             SourceEvent::Char('❤').localize(Snip { offset: 76, length: 8 },Snip { offset: 76, length: 8 }),
-            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 84, length: 1 },Snip { offset: 84, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 84, length: 1 },Snip { offset: 84, length: 1 }),
         ].into_iter();        
 
         while let Some(local_event) = src.next_char().unwrap() {
