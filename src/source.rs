@@ -487,7 +487,7 @@ impl<S> Source for MergeSeparator<S>
 where S: Source
 {
     fn next_char(&mut self) -> SourceResult {
-        fn merge_breakers(cur_loc: Local<()>, cur_b: Breaker, nxt_loc: Local<()>, nxt_b: Breaker) -> Result<(Local<()>,Breaker),Error> {
+        /*fn merge_breakers(cur_loc: Local<()>, cur_b: Breaker, nxt_loc: Local<()>, nxt_b: Breaker) -> Result<(Local<()>,Breaker),Error> {
             Ok(match (cur_b,nxt_b) {
                 (Breaker::Line,Breaker::Line) => {
                     let loc = Local::from_segment(cur_loc,nxt_loc)?;
@@ -507,6 +507,26 @@ where S: Source
                 (_,Breaker::Paragraph) => (cur_loc,cur_b),
                 (Breaker::Section,Breaker::Section) => (nxt_loc,nxt_b),
             })
+    }*/
+
+        fn merge_breakers(cur_loc: Local<()>, cur_b: Breaker, nxt_loc: Local<()>, nxt_b: Breaker) -> Result<(Local<()>,Breaker),Error> {
+            let loc = Local::from_segment(cur_loc,nxt_loc)?;
+            Ok((loc,match (cur_b,nxt_b) {
+                (Breaker::Line,Breaker::Line) => Breaker::Paragraph,
+                (Breaker::None,_) => nxt_b,
+                (_,Breaker::None) => cur_b,
+                (Breaker::Space,_) => nxt_b,
+                (_,Breaker::Space) => cur_b,
+                (Breaker::Word,_) => nxt_b,
+                (_,Breaker::Word) => cur_b,
+                (Breaker::Line,_) => nxt_b,
+                (_,Breaker::Line) => cur_b,
+                (Breaker::Sentence,_) => nxt_b,
+                (_,Breaker::Sentence) => cur_b,                
+                (Breaker::Paragraph,_) => nxt_b,
+                (_,Breaker::Paragraph) => cur_b,
+                (Breaker::Section,Breaker::Section) => nxt_b,
+            }))
         }
 
         
@@ -625,11 +645,11 @@ mod tests {
         let mut res_iter = [
             SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
             SourceEvent::Char('⪢').localize(Snip { offset: 1, length: 16 },Snip { offset: 1, length: 16 }),
-            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 24, length: 1 },Snip { offset: 24, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 17, length: 8 },Snip { offset: 17, length: 8 }),
             SourceEvent::Char('💯').localize(Snip { offset: 25, length: 9 },Snip { offset: 25, length: 9 }),
-            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 43, length: 1 },Snip { offset: 43, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 34, length: 10 },Snip { offset: 34, length: 10 }),
             SourceEvent::Char('\u{200d}').localize(Snip { offset: 44, length: 8 },Snip { offset: 44, length: 8 }),
-            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 70, length: 1 },Snip { offset: 70, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 52, length: 19 },Snip { offset: 52, length: 19 }),
             SourceEvent::Char('❤').localize(Snip { offset: 71, length: 8 },Snip { offset: 71, length: 8 }),
             SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 79, length: 1 },Snip { offset: 79, length: 1 }),
         ].into_iter();        
@@ -669,11 +689,11 @@ mod tests {
         let mut res_iter = [
             SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
             SourceEvent::Char('⪢').localize(Snip { offset: 1, length: 16 },Snip { offset: 1, length: 16 }),
-            SourceEvent::Breaker(Breaker::Line).localize(Snip { offset: 24, length: 1 },Snip { offset: 24, length: 1 }),
+            SourceEvent::Breaker(Breaker::Line).localize(Snip { offset: 17, length: 9 },Snip { offset: 17, length: 9 }),
             SourceEvent::Char('💯').localize(Snip { offset: 26, length: 9 },Snip { offset: 26, length: 9 }),
-            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 44, length: 1 },Snip { offset: 44, length: 1 }),
+            SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 35, length: 10 },Snip { offset: 35, length: 10 }),
             SourceEvent::Char('\u{200d}').localize(Snip { offset: 45, length: 8 },Snip { offset: 45, length: 8 }),
-            SourceEvent::Breaker(Breaker::Paragraph).localize(Snip { offset: 54, length: 12 },Snip { offset: 54, length: 12 }),
+            SourceEvent::Breaker(Breaker::Paragraph).localize(Snip { offset: 53, length: 23 },Snip { offset: 53, length: 23 }),
             SourceEvent::Char('❤').localize(Snip { offset: 76, length: 8 },Snip { offset: 76, length: 8 }),
             SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 84, length: 1 },Snip { offset: 84, length: 1 }),
         ].into_iter();        
@@ -716,11 +736,11 @@ mod tests {
         let mut res_iter = [
             SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
             SourceEvent::Char('⪢').localize(Snip { offset: 1, length: 16 },Snip { offset: 1, length: 16 }),
-            SourceEvent::Breaker(Breaker::Line).localize(Snip { offset: 24, length: 1 },Snip { offset: 24, length: 1 }),
+            SourceEvent::Breaker(Breaker::Line).localize(Snip { offset: 17, length: 9 },Snip { offset: 17, length: 9 }),
             SourceEvent::Char('💯').localize(Snip { offset: 26, length: 9 },Snip { offset: 26, length: 9 }),
-            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 44, length: 1 },Snip { offset: 44, length: 1 }),
+            SourceEvent::Breaker(Breaker::Word).localize(Snip { offset: 35, length: 10 },Snip { offset: 35, length: 10 }),
             SourceEvent::Char('\u{200d}').localize(Snip { offset: 45, length: 8 },Snip { offset: 45, length: 8 }),
-            SourceEvent::Breaker(Breaker::Paragraph).localize(Snip { offset: 54, length: 12 },Snip { offset: 54, length: 12 }),
+            SourceEvent::Breaker(Breaker::Paragraph).localize(Snip { offset: 53, length: 23 },Snip { offset: 53, length: 23 }),
             SourceEvent::Char('❤').localize(Snip { offset: 76, length: 8 },Snip { offset: 76, length: 8 }),
             SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 84, length: 1 },Snip { offset: 84, length: 1 }),
         ].into_iter();        

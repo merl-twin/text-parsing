@@ -866,7 +866,7 @@ end: ().localize(Snip { offset: 377, length: 1 },Snip { offset: 377, length: 1 }
                 begin: ().localize(Snip { offset: 261, length: 1 },Snip { offset: 261, length: 1 }),
                 end: ().localize(Snip { offset: 264, length: 1 },Snip { offset: 264, length: 1 }),
             }).localize(Snip { offset: 261, length: 4 },Snip { offset: 261, length: 4 }),
-            ParserEvent::Breaker(Breaker::Line).localize(Snip { offset: 265, length: 1 },Snip { offset: 265, length: 1 }),
+            ParserEvent::Breaker(Breaker::Line).localize(Snip { offset: 265, length: 3 },Snip { offset: 265, length: 3 }),
             ParserEvent::Parsed(Tag {
                 name: TagName::P, closing: Closing::Open, attributes: OptVec::None,
                 begin: ().localize(Snip { offset: 268, length: 1 },Snip { offset: 268, length: 1 }),
@@ -883,7 +883,7 @@ end: ().localize(Snip { offset: 377, length: 1 },Snip { offset: 377, length: 1 }
                 begin: ().localize(Snip { offset: 378, length: 1 },Snip { offset: 378, length: 1 }),
                 end: ().localize(Snip { offset: 381, length: 1 },Snip { offset: 381, length: 1 }),
             }).localize(Snip { offset: 378, length: 4 },Snip { offset: 378, length: 4 }),
-            ParserEvent::Breaker(Breaker::Line).localize(Snip { offset: 382, length: 1 },Snip { offset: 382, length: 1 }),
+            ParserEvent::Breaker(Breaker::Line).localize(Snip { offset: 382, length: 3 },Snip { offset: 382, length: 3 }),
             ParserEvent::Parsed(Tag {
                 name: TagName::P, closing: Closing::Open, attributes: OptVec::None,
                 begin: ().localize(Snip { offset: 385, length: 1 },Snip { offset: 385, length: 1 }),
@@ -928,7 +928,7 @@ end: ().localize(Snip { offset: 377, length: 1 },Snip { offset: 377, length: 1 }
             ParserEvent::Char('t').localize(Snip { offset: 443, length: 1 },Snip { offset: 443, length: 1 }),
             ParserEvent::Char('h').localize(Snip { offset: 444, length: 1 },Snip { offset: 444, length: 1 }),
             ParserEvent::Char('e').localize(Snip { offset: 445, length: 1 },Snip { offset: 445, length: 1 }),
-            ParserEvent::Breaker(Breaker::Line).localize(Snip { offset: 446, length: 1 },Snip { offset: 446, length: 1 }),
+            ParserEvent::Breaker(Breaker::Line).localize(Snip { offset: 446, length: 3 },Snip { offset: 446, length: 3 }),
             ParserEvent::Char('t').localize(Snip { offset: 449, length: 1 },Snip { offset: 449, length: 1 }),
             ParserEvent::Char('o').localize(Snip { offset: 450, length: 1 },Snip { offset: 450, length: 1 }),
             ParserEvent::Char('k').localize(Snip { offset: 451, length: 1 },Snip { offset: 451, length: 1 }),
