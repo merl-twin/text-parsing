@@ -67,9 +67,9 @@ pub(in super) struct ReadTag {
 #[derive(Debug)]
 struct AttributeCollector {
     need: OptVec<String>, // None means all, if no attrs neede there is no this struct (tmp_buffer = None)
-    attributes: OptVec<(String,Option<String>)>,
+    attributes: OptVec<(String,Option<Vec<Local<SourceEvent>>>)>,
     tmp_name: String,
-    tmp_value: String,
+    tmp_value: Vec<Local<SourceEvent>>,
 }
 impl AttributeCollector {
     fn new() -> AttributeCollector {
@@ -77,7 +77,7 @@ impl AttributeCollector {
             need: OptVec::None,
             attributes: OptVec::None,
             tmp_name: String::new(),
-            tmp_value: String::new(),
+            tmp_value: Vec::new(),
         }
     }
     fn do_need(&self, aname: &String) -> bool {
@@ -117,9 +117,10 @@ impl ReadTag {
             attr.tmp_name.push(c.to_ascii_lowercase());
         }
     }
-    fn attr_value_ascii_lowercase(&mut self, c: char) {
+    fn attr_value(&mut self, local_char: Local<char>) {
+        let (local,c) = local_char.into_inner();
         if let Some(attr) = &mut self.tmp_buffer {
-            attr.tmp_value.push(c.to_ascii_lowercase());
+            attr.tmp_value.push(local.local(SourceEvent::Char(c.to_ascii_lowercase())));
         }
     }
     fn attr_clear(&mut self) {
@@ -152,7 +153,7 @@ impl ReadTag {
             }
         }
     }
-    fn attributes(&mut self) -> OptVec<(String,Option<String>)> {
+    fn attributes(&mut self) -> OptVec<(String,Option<Vec<Local<SourceEvent>>>)> {
         match &mut self.tmp_buffer {
             Some(attr) => {
                 let mut tmp = OptVec::None;
@@ -168,13 +169,13 @@ fn create_tag_event(mut tag: ReadTag) -> Result<Local<ParserEvent<Tag>>,Error> {
     let attrs = tag.attributes();
     let t = match tag.kind {
         Kind::Open => match tag.void {
-            false => Tag::new(tag.name,Closing::Open,attrs),
-            true => Tag::new(tag.name,Closing::Void,attrs),
+            false => Tag::new(tag.name,Closing::Open,attrs,tag.begin.local(()),tag.current.local(())),
+            true => Tag::new(tag.name,Closing::Void,attrs,tag.begin.local(()),tag.current.local(())),
         },
-        Kind::Close => Tag::new(tag.name,Closing::Close,attrs),
+        Kind::Close => Tag::new(tag.name,Closing::Close,attrs,tag.begin.local(()),tag.current.local(())),
         Kind::Slash |
         Kind::Excl |
-        Kind::Quest => Tag::new(tag.name,Closing::Void,attrs),
+        Kind::Quest => Tag::new(tag.name,Closing::Void,attrs,tag.begin.local(()),tag.current.local(())),
     };
     Local::from_segment(tag.begin,tag.current).map(|local| local.with_inner(ParserEvent::Parsed(t)))
 }
@@ -296,8 +297,8 @@ fn tag_attr_value_apos(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextR
                     tag.attr_flush();
                     Next::empty().with_state(TaggerState::TagWaitAttrName(tag))
                 },
-                c @ _ => {
-                    tag.attr_value_ascii_lowercase(c);
+                _ => {
+                    tag.attr_value(local_char);
                     Next::empty().with_state(TaggerState::TagAttrValueApos(tag))
                 },
             }
@@ -316,8 +317,8 @@ fn tag_attr_value_quote(mut tag: ReadTag, local_src: Local<SourceEvent>) -> Next
                     tag.attr_flush();
                     Next::empty().with_state(TaggerState::TagWaitAttrName(tag))
                 },
-                c @ _ => {
-                    tag.attr_value_ascii_lowercase(c);
+                _ => {
+                    tag.attr_value(local_char);
                     Next::empty().with_state(TaggerState::TagAttrValueQuote(tag))
                 },
             }
@@ -345,8 +346,8 @@ fn tag_attr_value(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextResult
                     tag.attr_flush();
                     Next::empty().with_event(create_tag_event(tag)?)
                 },
-                c @ _ => {
-                    tag.attr_value_ascii_lowercase(c);
+                _ => {
+                    tag.attr_value(local_char);
                     Next::empty().with_state(TaggerState::TagAttrValue(tag))
                 },
             }
@@ -378,8 +379,8 @@ fn tag_wait_attr_value(mut tag: ReadTag, local_src: Local<SourceEvent>) -> NextR
                 },
                 '\'' => Next::empty().with_state(TaggerState::TagAttrValueApos(tag)),
                 '"' => Next::empty().with_state(TaggerState::TagAttrValueQuote(tag)),
-                c @ _ => {
-                    tag.attr_value_ascii_lowercase(c);
+                _ => {
+                    tag.attr_value(local_char);
                     Next::empty().with_state(TaggerState::TagAttrValue(tag))
                 },
             }

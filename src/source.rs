@@ -81,6 +81,44 @@ impl Source for EmptySource {
     }
 }
 
+impl<S> Source for Option<S>
+where S: Source
+{
+    fn next_char(&mut self) -> SourceResult {
+        match self {
+            Some(source) => source.next_char(),
+            None => Ok(None),
+        }
+    }
+    fn processed(&self) -> Processed {
+        match self {
+            Some(source) => source.processed(),
+            None => Processed::default(),
+        }
+    }
+}
+
+pub struct ParserSource<'p,'s,P,S> {
+    parser: &'p mut P,
+    source: &'s mut S,
+}
+impl<'p,'s,P,S> ParserSource<'p,'s,P,S> {
+    pub fn new<'a,'b>(parser: &'a mut P, source: &'b mut S) -> ParserSource<'a,'b,P,S> {
+        ParserSource { parser, source }
+    }
+}
+impl<'p,'s,P,S> Source for ParserSource<'p,'s,P,S>
+where P: PipeParser,
+      S: Source
+{
+    fn next_char(&mut self) -> SourceResult {
+        self.parser.next_char(self.source)
+    }
+    fn processed(&self) -> Processed {
+        self.source.processed()
+    }
+}
+
 pub struct OptSource {
     source: Option<Local<SourceEvent>>,
     done: Processed,
@@ -168,8 +206,19 @@ pub trait SourceExt: Source + Sized {
             filter,
         }
     }
+    fn map_char<M>(self, mapper: M) -> MapChar<Self,M> {
+        MapChar {
+            source: self,
+            mapper,
+        }
+    }
     fn into_separator(self) -> IntoSeparator<Self> {
         IntoSeparator {
+            source: self,
+        }
+    }
+    fn merge_separators(self) -> MergeSeparator<Self> {
+        MergeSeparator {
             source: self,
             buffer: None,
             current: None,
@@ -196,9 +245,34 @@ pub trait SourceExt: Source + Sized {
     }
 }
 
+pub trait CharMapper {
+    fn map(&mut self, c: char) -> char;
+}
+
 pub trait Mapper {
     fn map(&mut self, se: &SourceEvent) -> Option<SourceEvent>;
 }
+
+pub struct MapChar<S,M>
+{
+    source: S,
+    mapper: M,
+}
+impl<S,M> Source for MapChar<S,M>
+where S: Source,
+      M: CharMapper
+{
+    fn next_char(&mut self) -> SourceResult {
+        self.source.next_char().map(|ole| ole.map(|local_se| local_se.map(|se| match se {
+            SourceEvent::Char(c) => SourceEvent::Char(self.mapper.map(c)),
+            b @ SourceEvent::Breaker(_) => b,
+        })))  
+    }
+    fn processed(&self) -> Processed {
+        self.source.processed()
+    }
+}
+        
 
 pub struct Map<S,M>
 {
@@ -371,10 +445,45 @@ use unicode_properties::{
 
 pub struct IntoSeparator<S> {
     source: S,
+}
+impl<S> Source for IntoSeparator<S>
+where S: Source
+{
+    fn next_char(&mut self) -> SourceResult {
+        self.source.next_char().map(|opt_lse| {
+            opt_lse.map(|local_se| {
+                local_se.map(|se| {
+                    match se {
+                        SourceEvent::Char(c) => {
+                            match c {
+                                '\n' => SourceEvent::Breaker(Breaker::Line),
+                                _ => match c.general_category() {
+                                    GeneralCategory::Control |
+                                    GeneralCategory::SpaceSeparator => SourceEvent::Breaker(Breaker::Space),
+                                    GeneralCategory::LineSeparator => SourceEvent::Breaker(Breaker::Line),                    
+                                    GeneralCategory::ParagraphSeparator => SourceEvent::Breaker(Breaker::Paragraph),
+                                    _ => SourceEvent::Char(c),
+                                },
+                            }
+                        },
+                        b @ SourceEvent::Breaker(..) => b,
+                    }
+                })
+            })
+        })
+    }
+    fn processed(&self) -> Processed {
+        self.source.processed()
+    }
+}
+
+
+pub struct MergeSeparator<S> {
+    source: S,
     buffer: Option<Local<SourceEvent>>,
     current: Option<(Local<()>,Breaker)>,
 }
-impl<S> Source for IntoSeparator<S>
+impl<S> Source for MergeSeparator<S>
 where S: Source
 {
     fn next_char(&mut self) -> SourceResult {
@@ -407,23 +516,7 @@ where S: Source
                 None => {
                     match self.source.next_char()? {
                         Some(local_se) => {                            
-                            let (local,se) = local_se.map(|se| {
-                                match se {
-                                    SourceEvent::Char(c) => {
-                                        match c {
-                                            '\n' => SourceEvent::Breaker(Breaker::Line),
-                                            _ => match c.general_category() {
-                                                GeneralCategory::Control |
-                                                GeneralCategory::SpaceSeparator => SourceEvent::Breaker(Breaker::Space),
-                                                GeneralCategory::LineSeparator => SourceEvent::Breaker(Breaker::Line),                    
-                                                GeneralCategory::ParagraphSeparator => SourceEvent::Breaker(Breaker::Paragraph),
-                                                _ => SourceEvent::Char(c),
-                                            },
-                                        }
-                                    },
-                                    b @ SourceEvent::Breaker(..) => b,
-                                }
-                            }).into_inner();
+                            let (local,se) = local_se.into_inner();
                             match se {
                                 c @ SourceEvent::Char(..) => match self.current.take() {
                                     Some((local_br,br)) => {
@@ -455,7 +548,6 @@ where S: Source
         self.source.processed()
     }
 }
-
 
 
 #[cfg(test)]
@@ -527,7 +619,8 @@ mod tests {
                     _ => Some(c),
                 }
             })
-            .into_separator();
+            .into_separator()
+            .merge_separators();
 
         let mut res_iter = [
             SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
@@ -570,7 +663,8 @@ mod tests {
                     _ => Some(c),
                 }
             })
-            .into_separator();
+            .into_separator()
+            .merge_separators();
 
         let mut res_iter = [
             SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),
@@ -616,7 +710,8 @@ mod tests {
                     _ => Some(c),
                 }
             })
-            .into_separator();
+            .into_separator()
+            .merge_separators();
 
         let mut res_iter = [
             SourceEvent::Breaker(Breaker::Space).localize(Snip { offset: 0, length: 1 },Snip { offset: 0, length: 1 }),

@@ -1,13 +1,17 @@
 
 use opt_struct::OptVec;
-use crate::Breaker;
+use crate::{
+    Breaker,Local,SourceEvent,
+};
 
 #[derive(Debug,Eq,PartialEq)]
 pub struct Tag {
     pub name: TagName,
     //pub breaker: Breaker,
     pub closing: Closing,
-    pub attributes: OptVec<(String, Option<String>)>,
+    pub attributes: OptVec<(String,Option<Vec<Local<SourceEvent>>>)>,
+    pub begin: Local<()>,
+    pub end: Local<()>,
 }
 
 impl From<Tag> for Breaker {
@@ -20,7 +24,7 @@ impl Tag {
    /* pub fn from_slice(s: &str) -> Tag {
         
 }*/
-    pub fn new(tag: TagName, clo: Closing, attrs: OptVec<(String, Option<String>)>) -> Tag {
+    pub fn new(tag: TagName, clo: Closing, attrs: OptVec<(String,Option<Vec<Local<SourceEvent>>>)>, begin: Local<()>, end: Local<()>) -> Tag {
         Tag {
             //breaker: tag.breaker(),
             closing: match tag.is_void() {
@@ -29,6 +33,8 @@ impl Tag {
             },
             name: tag,            
             attributes: attrs,
+            begin,
+            end,
         }
     }
 }
@@ -611,7 +617,7 @@ impl<'s> Into<Breaker> for &'s TagName {
             // Formatting            
             TagName::Cite |
             TagName::Code |
-            TagName::Blockquote => Breaker::Sentence,
+            TagName::Blockquote => Breaker::Word,
             
             TagName::Font |
             TagName::Bdi |

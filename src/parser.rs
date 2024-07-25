@@ -3,6 +3,7 @@ use crate::{
     SourceEvent,
     SourceResult, Source,
     Breaker, Error,
+    source::ParserSource,
 };
 
 pub trait Parser {
@@ -32,21 +33,23 @@ pub trait ParserExt: Parser + Sized {
             current_iter: None,
         }
     }
-    /*fn partial_pipe<P>(self, parser: P) -> PartialPipe<Self,P>
-    where P: PipeParser
+    fn partial_pipe_with<I,F>(self, func: F) -> PartialPipedWith<Self,I,F>
+    where I: IntoIterator<Item = Local<SourceEvent>>,
+          F: FnMut(<Self as Parser>::Data) -> Result<I,<Self as Parser>::Data>
     {
-        PartialPipe {
+        PartialPipedWith {
             parser: self,
-            pipe: parser,
+            func,
+            current_iter: None,
         }
-}*/
+    }
     fn filter<F: Filter<Self::Data>>(self, filter: F) -> Filtered<Self,F> {
         Filtered {
             parser: self,
             filter,
         }
     }
-    fn try_filter<F: TryFilter<Self::Data>>(self, filter: F) -> TryFiltered<Self,F> {
+    /*fn try_filter<F: TryFilter<Self::Data>>(self, filter: F) -> TryFiltered<Self,F> {
         TryFiltered {
             parser: self,
             filter,
@@ -59,7 +62,7 @@ pub trait ParserExt: Parser + Sized {
             parser: self,
             into_breaker,
         }
-    }
+    }*/
     fn into_breaker(self) -> PipeBreaker<Self> {
         PipeBreaker {
             parser: self,
@@ -76,14 +79,39 @@ pub enum ParserEvent<D> {
     Parsed(D),
 }
 
+
 pub trait Filter<D> {
     fn filter(&mut self, ev: ParserEvent<D>) -> Option<ParserEvent<D>>;
 }
-pub trait TryFilter<D> {
+
+pub struct Filtered<P,F> {
+    parser: P,
+    filter: F,
+}
+impl<P,F> Parser for Filtered<P,F>
+where P: Parser,
+      F: Filter<<P as Parser>::Data>
+{
+    type Data = <P as Parser>::Data;
+    fn next_event<S: Source>(&mut self, src: &mut S) -> ParserResult<Self::Data> {
+        while let Some(local_pe) = self.parser.next_event(src)? {
+            let (local,pe) = local_pe.into_inner();
+            if let Some(pe) = self.filter.filter(pe) {
+                return Ok(Some(local.local(pe)));
+            }
+        }
+        Ok(None)
+    }
+}
+
+/*pub trait TryFilter<D> {
     fn filter(&mut self, ev: ParserEvent<D>) -> Result<Option<ParserEvent<D>>,Error>;
 }
 pub trait IntoBreaker<D> {
     fn into_breaker(&mut self, data: &D) -> Option<Breaker>;
+}
+pub trait Flat {
+    fn flatten(&mut self, ) -> 
 }
 
 pub struct TryIntoBreaker<P,B> {
@@ -114,25 +142,6 @@ where P: Parser,
     }
 }
 
-pub struct Filtered<P,F> {
-    parser: P,
-    filter: F,
-}
-impl<P,F> Parser for Filtered<P,F>
-where P: Parser,
-      F: Filter<<P as Parser>::Data>
-{
-    type Data = <P as Parser>::Data;
-    fn next_event<S: Source>(&mut self, src: &mut S) -> ParserResult<Self::Data> {
-        while let Some(local_pe) = self.parser.next_event(src)? {
-            let (local,pe) = local_pe.into_inner();
-            if let Some(pe) = self.filter.filter(pe) {
-                return Ok(Some(local.local(pe)));
-            }
-        }
-        Ok(None)
-    }
-}
 pub struct TryFiltered<P,F> {
     parser: P,
     filter: F,
@@ -151,7 +160,7 @@ where P: Parser,
         }
         Ok(None)
     }
-}
+}*/
 
 pub struct PipeBreaker<P> {
     parser: P,
@@ -216,23 +225,120 @@ where P: Parser,
     }
 }
 
-/*
-pub struct PartialPipe<S,P> {
-    parser: S,
-    pipe: P,
-}
-impl<S,P> Parser for PartialPipe<S,P>
-where S: Parser,
-      P: PipeParser
+
+pub struct PartialPipedWith<P,I,F>
+where P: Parser,
+      I: IntoIterator<Item = Local<SourceEvent>>,
+      F: FnMut(<P as Parser>::Data) -> Result<I,<P as Parser>::Data>
 {
-    type Data = <S as Parser>::Data;
+    parser: P,
+    func: F,
+    current_iter: Option<<I as IntoIterator>::IntoIter>, 
+}
+impl<P,I,F> Parser for PartialPipedWith<P,I,F>
+where P: Parser,
+      I: IntoIterator<Item = Local<SourceEvent>>,
+      F: FnMut(<P as Parser>::Data) -> Result<I,<P as Parser>::Data>
+{
+    type Data = <P as Parser>::Data;
     fn next_event<S: Source>(&mut self, src: &mut S) -> ParserResult<Self::Data> {
-        
+        if let Some(iter) = &mut self.current_iter {
+            match iter.next() {
+                Some(local_se) => return Ok(Some(local_se.map(|se|match se {
+                    SourceEvent::Char(c) => ParserEvent::Char(c),
+                    SourceEvent::Breaker(b) => ParserEvent::Breaker(b),
+                }))),
+                None => self.current_iter = None,
+            }
+        }
+        while let Some(local_pe) = self.parser.next_event(src)? {
+            let (local,pe) = local_pe.into_inner();
+            match pe {
+                p @ ParserEvent::Char(..) |
+                p @ ParserEvent::Breaker(..) => return Ok(Some(local.local(p))),
+                ParserEvent::Parsed(d) => match (&mut self.func)(d) {
+                    Ok(into_iter) => {
+                        let mut iter = into_iter.into_iter();
+                        if let Some(local_se) = iter.next() {
+                            self.current_iter = Some(iter);
+                            return Ok(Some(local_se.map(|se| match se {
+                                SourceEvent::Char(c) => ParserEvent::Char(c),
+                                SourceEvent::Breaker(b) => ParserEvent::Breaker(b),
+                            })));
+                        }
+                    },
+                    Err(d) => return Ok(Some(local.local(ParserEvent::Parsed(d)))),
+                },
+            }
+        }
+        Ok(None)
     }
 }
 
-struct SourceFilter {
-    
-}
- */
 
+impl<T: PipeParser> PipeParserExt for T {}
+
+pub trait PipeParserExt: PipeParser + Sized {
+    fn pipe<P>(self, pipe: P) -> Pipe<Self,P>
+    where P: PipeParser
+    {
+        Pipe {
+            parser: self,
+            pipe,
+        }
+    }
+    fn option(self, use_it: bool) -> Option<Self> {
+        match use_it {
+            true => Some(self),
+            false => None,
+        }
+    }
+
+    fn as_source<'p,'s,S: Source>(&'p mut self, src: &'s mut S) -> ParserSource<'p,'s,Self,S> {
+        ParserSource::new(self,src)
+    }
+}
+
+
+pub struct Pipe<P1,P2> {
+    parser: P1,
+    pipe: P2,
+}
+impl<P1,P2> PipeParser for Pipe<P1,P2>
+where P1: PipeParser,
+      P2: PipeParser
+{
+    fn next_char<S: Source>(&mut self, src: &mut S) -> SourceResult {
+        let mut src = self.parser.as_source(src);
+        self.pipe.next_char(&mut src)       
+    }
+}
+
+
+
+
+impl<P> Parser for Option<P>
+where P: Parser
+{
+    type Data = <P as Parser>::Data;
+    fn next_event<S: Source>(&mut self, src: &mut S) -> ParserResult<Self::Data> {
+        match self {
+            Some(parser) => parser.next_event(src),
+            None => Ok(src.next_char()?.map(|local_se| local_se.map(|se| match se {
+                SourceEvent::Char(c) => ParserEvent::Char(c),
+                SourceEvent::Breaker(b) => ParserEvent::Breaker(b),
+            }))),
+        }
+    }
+}
+
+impl<P> PipeParser for Option<P>
+where P: PipeParser
+{
+    fn next_char<S: Source>(&mut self, src: &mut S) -> SourceResult {
+        match self {
+            Some(parser) => parser.next_char(src),
+            None => src.next_char(),
+        }
+    }
+}

@@ -13,6 +13,7 @@ pub use source::{
     OptSource,
     Processed,
     EmptySource,
+    ParserSource,
     SourceExt,
     SourceResult,
     SourceEvent,
@@ -26,11 +27,13 @@ pub use parser::{
     Parser,
     ParserExt,
     PipeParser,
+    PipeParserExt,
     IntoPipeParser,
     ParserResult,
     ParserEvent,
 
     //Filter, Filtered, TryFilter, TryFiltered, IntoBreaker, TryIntoBreaker, PipeBreaker
+    // Pipe
 };
 
 mod state;
