@@ -39,7 +39,7 @@ pub enum Breaker {
     Section,
 }
 
-#[derive(Debug,Eq,PartialEq)]
+#[derive(Debug,Clone,Copy,Eq,PartialEq)]
 pub enum SourceEvent {
     Char(char),
     Breaker(Breaker),
@@ -487,32 +487,9 @@ impl<S> Source for MergeSeparator<S>
 where S: Source
 {
     fn next_char(&mut self) -> SourceResult {
-        /*fn merge_breakers(cur_loc: Local<()>, cur_b: Breaker, nxt_loc: Local<()>, nxt_b: Breaker) -> Result<(Local<()>,Breaker),Error> {
-            Ok(match (cur_b,nxt_b) {
-                (Breaker::Line,Breaker::Line) => {
-                    let loc = Local::from_segment(cur_loc,nxt_loc)?;
-                    (loc,Breaker::Paragraph)
-                },
-                (Breaker::None,_) => (nxt_loc,nxt_b),
-                (_,Breaker::None) => (cur_loc,cur_b),
-                (Breaker::Space,_) => (nxt_loc,nxt_b),
-                (_,Breaker::Space) => (cur_loc,cur_b),
-                (Breaker::Word,_) => (nxt_loc,nxt_b),
-                (_,Breaker::Word) => (cur_loc,cur_b),
-                (Breaker::Line,_) => (nxt_loc,nxt_b),
-                (_,Breaker::Line) => (cur_loc,cur_b),
-                (Breaker::Sentence,_) => (nxt_loc,nxt_b),
-                (_,Breaker::Sentence) => (cur_loc,cur_b),                
-                (Breaker::Paragraph,_) => (nxt_loc,nxt_b),
-                (_,Breaker::Paragraph) => (cur_loc,cur_b),
-                (Breaker::Section,Breaker::Section) => (nxt_loc,nxt_b),
-            })
-    }*/
-
         fn merge_breakers(cur_loc: Local<()>, cur_b: Breaker, nxt_loc: Local<()>, nxt_b: Breaker) -> Result<(Local<()>,Breaker),Error> {
             let loc = Local::from_segment(cur_loc,nxt_loc)?;
             Ok((loc,match (cur_b,nxt_b) {
-                (Breaker::Line,Breaker::Line) => Breaker::Paragraph,
                 (Breaker::None,_) => nxt_b,
                 (_,Breaker::None) => cur_b,
                 (Breaker::Space,_) => nxt_b,
@@ -640,6 +617,7 @@ mod tests {
                 }
             })
             .into_separator()
+            .pipe(crate::paragraph::Builder::new().create())
             .merge_separators();
 
         let mut res_iter = [
@@ -684,6 +662,7 @@ mod tests {
                 }
             })
             .into_separator()
+            .pipe(crate::paragraph::Builder::new().create())
             .merge_separators();
 
         let mut res_iter = [
@@ -731,6 +710,7 @@ mod tests {
                 }
             })
             .into_separator()
+            .pipe(crate::paragraph::Builder::new().create())
             .merge_separators();
 
         let mut res_iter = [

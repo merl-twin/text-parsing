@@ -59,11 +59,19 @@ pub mod tagger {
     pub use tags::{Tag,TagName,Closing,SpecTag};
 }
 
+pub mod paragraph {
+    mod parser;
+    mod state;
+
+    pub use parser::{Builder,Paragraphs};
+}
+
 
 #[derive(Debug)]
 pub enum Error {
     EofInTag,
     EndBeforeBegin,
+    NoBegin,
 }
 
 
