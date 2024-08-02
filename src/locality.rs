@@ -2,7 +2,7 @@ use crate::{
     Error,
 };
 
-#[derive(Debug,Clone,Copy,Eq,PartialEq)]
+#[derive(Debug,Clone,Copy,Eq,PartialEq,Ord,PartialOrd)]
 pub struct Snip {
     pub offset: usize,
     pub length: usize,
@@ -15,7 +15,7 @@ pub trait Localize: Sized {
 }
 impl<T: Sized> Localize for T {}
 
-#[derive(Debug,Clone,Copy,Eq,PartialEq)]
+#[derive(Debug,Clone,Copy,Eq,PartialEq,Ord,PartialOrd)]
 pub struct Local<E> {
     chars: Snip,
     bytes: Snip,
