@@ -23,6 +23,14 @@ pub trait IntoPipeParser {
 impl<T: Parser> ParserExt for T {}
 
 pub trait ParserExt: Parser + Sized {
+    fn map<F,U>(self, func: F) -> Map<Self,F,U>
+    where F: FnMut(<Self as Parser>::Data) -> U
+    {
+        Map {
+            parser: self,
+            func,
+        }
+    }
     fn pipe_with<I,F>(self, func: F) -> PipedWith<Self,I,F>
     where I: IntoIterator<Item = SourceEvent>,
           F: FnMut(<Self as Parser>::Data) -> I
@@ -77,6 +85,33 @@ pub enum ParserEvent<D> {
     Char(char),
     Breaker(Breaker),
     Parsed(D),
+}
+
+pub struct Map<P,F,U>
+where P: Parser,
+      F: FnMut(<P as Parser>::Data) -> U
+{
+    parser: P,
+    func: F,
+}
+impl<P,F,U> Parser for Map<P,F,U>
+where P: Parser,
+      F: FnMut(<P as Parser>::Data) -> U,
+{
+    type Data = U;
+
+    fn next_event<S: Source>(&mut self, src: &mut S) -> ParserResult<Self::Data> {
+        self.parser.next_event(src)
+            .map(|opt_lpe| {
+                opt_lpe.map(|local_pe| {
+                    local_pe.map(|pe| match pe {
+                        ParserEvent::Char(c) => ParserEvent::Char(c),
+                        ParserEvent::Breaker(b) => ParserEvent::Breaker(b),
+                        ParserEvent::Parsed(d) => ParserEvent::Parsed((self.func)(d)),                        
+                    })
+                })
+            })
+    }
 }
 
 
