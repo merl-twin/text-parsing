@@ -199,17 +199,25 @@ impl StateMachine for TaggerState {
     
     fn eof(self, props: &TaggerProperties) -> NextResult<TaggerState,Tag> {
         // unexpected EOF in TAG
-        fn push_tag_eof(_props: &TaggerProperties, raw: Vec<Local<SourceEvent>>)-> Result<(),Error> {
-            Err(Error::EofInTag(raw))
+        fn push_tag_eof(props: &TaggerProperties, tag: ReadTag)-> Result<Local<ParserEvent<Tag>>,Error> {
+            match props.eof_to_named_tag && (tag.name.is_named() || tag.name.is_service()) {
+                true => create_tag_event(tag),
+                false => Err(Error::EofInTag(tag.raw)),
+            }
         }
         
         Ok(match self {
             TaggerState::Init => Next::empty(),
             TaggerState::MayBeTag{ tag_char, .. } => Next::empty().with_event(tag_char.map(|c| ParserEvent::Char(c))),
-            TaggerState::SlashedTag{ raw, .. } |
-            TaggerState::TagName{ raw, .. } => {
-                push_tag_eof(props,raw)?;
+            TaggerState::SlashedTag{ begin, current, .. } => {
                 Next::empty()
+                    .with_event(begin.map(|c| ParserEvent::Char(c)))
+                    .with_event(current.map(|c| ParserEvent::Char(c)))
+            },
+            TaggerState::TagName{ begin, current, kind, name, raw } => {
+                let (name,attrs) = tag_name_attrs(name,props);
+                let lpe = push_tag_eof(props, ReadTag{ begin, kind, name, void: false, current, tmp_buffer: attrs, raw })?;
+                Next::empty().with_event(lpe)
             },
             TaggerState::TagEnd(tag) |
             TaggerState::TagWaitAttrName(tag) |
@@ -219,8 +227,8 @@ impl StateMachine for TaggerState {
             TaggerState::TagAttrValue(tag) |
             TaggerState::TagAttrValueApos(tag) |
             TaggerState::TagAttrValueQuote(tag) => {
-                push_tag_eof(props,tag.raw)?;
-                Next::empty()
+                let lpe = push_tag_eof(props,tag)?;
+                Next::empty().with_event(lpe)
             },
         })
     }
