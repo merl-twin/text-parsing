@@ -86,6 +86,14 @@ pub enum ParserEvent<D> {
     Breaker(Breaker),
     Parsed(D),
 }
+impl<D> From<SourceEvent> for ParserEvent<D> {
+    fn from(se: SourceEvent) -> ParserEvent<D> {
+        match se {
+            SourceEvent::Char(c) => ParserEvent::Char(c),
+            SourceEvent::Breaker(b) => ParserEvent::Breaker(b),
+        }
+    }
+}
 
 pub struct Map<P,F,U>
 where P: Parser,
@@ -279,10 +287,7 @@ where P: Parser,
     fn next_event<S: Source>(&mut self, src: &mut S) -> ParserResult<Self::Data> {
         if let Some(iter) = &mut self.current_iter {
             match iter.next() {
-                Some(local_se) => return Ok(Some(local_se.map(|se|match se {
-                    SourceEvent::Char(c) => ParserEvent::Char(c),
-                    SourceEvent::Breaker(b) => ParserEvent::Breaker(b),
-                }))),
+                Some(local_se) => return Ok(Some(local_se.map(|se| se.into()))),
                 None => self.current_iter = None,
             }
         }

@@ -67,11 +67,47 @@ pub mod paragraph {
 }
 
 
-#[derive(Debug)]
 pub enum Error {
-    EofInTag,
+    EofInTag(Vec<Local<SourceEvent>>),
     EndBeforeBegin,
     NoBegin,
 }
 
+impl std::fmt::Debug for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::EndBeforeBegin => f.debug_struct("EndBeforeBegin"),
+            Error::NoBegin => f.debug_struct("NoBegin"),
+            Error::EofInTag(v) => {
+                let mut dbg = f.debug_struct("EofInTag");
+                let mut iter = v.into_iter();
+                if let Some(lse) = iter.next() {
+                    let (local,se) = lse.into_inner();
+                    let first = local;
+                    let mut last = local;
+                    let mut s = String::new();
+                    push_s(se,&mut s);
+                    for lse in iter {
+                        let (local,se) = lse.into_inner();
+                        last = local;
+                        push_s(se,&mut s);
+                    }                    
+                    if let Ok(lc) = Local::from_segment(first,last) {
+                        dbg.field("chars", &lc.chars())
+                            .field("bytes", &lc.bytes());
+                    }
+                    dbg.field("data", &s);                    
+                }
+                dbg
+            }
+        }.finish()
+    }
+}
 
+fn push_s(se: SourceEvent, s: &mut String) {
+    match se {
+        SourceEvent::Char(c) => s.push(c),
+        SourceEvent::Breaker(Breaker::None) => {},
+        SourceEvent::Breaker(_) => s.push(' '),
+    }
+}

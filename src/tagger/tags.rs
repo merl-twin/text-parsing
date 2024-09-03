@@ -1,7 +1,7 @@
 
 use opt_struct::OptVec;
 use crate::{
-    Breaker,Local,SourceEvent,
+    Snip,Breaker,Local,SourceEvent,
 };
 
 #[derive(Debug,Eq,PartialEq)]
@@ -9,9 +9,11 @@ pub struct Tag {
     pub name: TagName,
     //pub breaker: Breaker,
     pub closing: Closing,
-    pub attributes: OptVec<(String,Option<Vec<Local<SourceEvent>>>)>,
+    pub attributes: OptVec<(String,Option<Snip>)>, // snip in raw
     pub begin: Local<()>,
     pub end: Local<()>,
+
+    pub raw: Vec<Local<SourceEvent>>,
 }
 
 impl From<Tag> for Breaker {
@@ -21,10 +23,7 @@ impl From<Tag> for Breaker {
 }
 
 impl Tag {
-   /* pub fn from_slice(s: &str) -> Tag {
-        
-}*/
-    pub fn new(tag: TagName, clo: Closing, attrs: OptVec<(String,Option<Vec<Local<SourceEvent>>>)>, begin: Local<()>, end: Local<()>) -> Tag {
+    pub fn new(tag: TagName, clo: Closing, attrs: OptVec<(String,Option<Snip>)>, begin: Local<()>, end: Local<()>, raw: Vec<Local<SourceEvent>>) -> Tag {
         Tag {
             //breaker: tag.breaker(),
             closing: match tag.is_void() {
@@ -35,6 +34,7 @@ impl Tag {
             attributes: attrs,
             begin,
             end,
+            raw,
         }
     }
 }
@@ -576,6 +576,42 @@ impl TagName {
             TagName::Track |
             TagName::Wbr => true,
             _ => false,
+        }
+    }
+
+    pub(crate) fn is_common(&self) -> bool {
+        match self {
+            TagName::H1 |
+            TagName::H2 |
+            TagName::H3 |
+            TagName::H4 |
+            TagName::H5 |
+            TagName::H6 |
+            TagName::P |           
+            TagName::Br |
+            TagName::Hr |
+            TagName::Div |
+            TagName::B |
+            TagName::I |
+            TagName::S |
+            TagName::U |
+            TagName::Code |
+            TagName::A |
+            TagName::Img => true,
+            _ => false,                
+        }
+    }
+    pub(crate) fn is_service(&self) -> bool {
+        match self {
+            TagName::X(_) => true,
+            _ => false,
+        }
+    }
+    pub(crate) fn is_named(&self) -> bool {
+        match self {
+            TagName::Other(_) |
+            TagName::X(_) => false,
+            _ => true,
         }
     }
 }
