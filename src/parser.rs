@@ -31,6 +31,14 @@ pub trait ParserExt: Parser + Sized {
             func,
         }
     }
+    fn then_with<F>(self, func: F) -> ThenWith<Self,F>
+    where F: FnMut(ParserResult<Self::Data>) -> ParserResult<Self::Data>
+    {
+        ThenWith {
+            parser: self,
+            func,
+        }
+    }
     fn pipe_with<I,F>(self, func: F) -> PipedWith<Self,I,F>
     where I: IntoIterator<Item = SourceEvent>,
           F: FnMut(<Self as Parser>::Data) -> I
@@ -119,6 +127,24 @@ where P: Parser,
                     })
                 })
             })
+    }
+}
+
+pub struct ThenWith<P,F>
+where P: Parser,
+      F: FnMut(ParserResult<<P as Parser>::Data>) -> ParserResult<<P as Parser>::Data>
+{
+    parser: P,
+    func: F,
+}
+impl<P,F> Parser for ThenWith<P,F>
+where P: Parser,
+      F: FnMut(ParserResult<<P as Parser>::Data>) -> ParserResult<<P as Parser>::Data>
+{
+    type Data = <P as Parser>::Data;
+
+    fn next_event<S: Source>(&mut self, src: &mut S) -> ParserResult<Self::Data> {
+        (self.func)(self.parser.next_event(src))
     }
 }
 
