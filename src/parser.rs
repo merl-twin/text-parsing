@@ -31,12 +31,14 @@ pub trait ParserExt: Parser + Sized {
             func,
         }
     }
-    fn then_with<F>(self, func: F) -> ThenWith<Self,F>
-    where F: FnMut(ParserResult<Self::Data>) -> ParserResult<Self::Data>
+    fn map_eof<I,F>(self, func: F) -> MapEof<Self,I,F>
+    where I: IntoIterator<Item = Local<ParserEvent<<Self as Parser>::Data>>>,
+          F: FnMut(Vec<Local<SourceEvent>>) -> Result<I,Error>
     {
-        ThenWith {
+        MapEof {
             parser: self,
             func,
+            iter: None,
         }
     }
     fn pipe_with<I,F>(self, func: F) -> PipedWith<Self,I,F>
@@ -130,21 +132,44 @@ where P: Parser,
     }
 }
 
-pub struct ThenWith<P,F>
+pub struct MapEof<P,I,F>
 where P: Parser,
-      F: FnMut(ParserResult<<P as Parser>::Data>) -> ParserResult<<P as Parser>::Data>
+      I: IntoIterator<Item = Local<ParserEvent<<P as Parser>::Data>>>,
+      F: FnMut(Vec<Local<SourceEvent>>) -> Result<I,Error>
 {
     parser: P,
     func: F,
+    iter: Option<I::IntoIter>,
 }
-impl<P,F> Parser for ThenWith<P,F>
+impl<P,I,F> Parser for MapEof<P,I,F>
 where P: Parser,
-      F: FnMut(ParserResult<<P as Parser>::Data>) -> ParserResult<<P as Parser>::Data>
+      I: IntoIterator<Item = Local<ParserEvent<<P as Parser>::Data>>>,
+      F: FnMut(Vec<Local<SourceEvent>>) -> Result<I,Error>
 {
     type Data = <P as Parser>::Data;
 
     fn next_event<S: Source>(&mut self, src: &mut S) -> ParserResult<Self::Data> {
-        (self.func)(self.parser.next_event(src))
+        if let Some(iter) = &mut self.iter {
+            match iter.next() {
+                Some(lpe) => return Ok(Some(lpe)),
+                None => self.iter = None,
+            }
+        }
+
+        match self.parser.next_event(src) {
+            Ok(olpe) => Ok(olpe),
+            Err(Error::EofInTag(raw)) => {
+                let mut iter = (self.func)(raw)?.into_iter();
+                match iter.next() {
+                    Some(lpe) => {
+                        self.iter = Some(iter);
+                        Ok(Some(lpe))
+                    },
+                    None => Ok(None),
+                } 
+            },
+            Err(e) => Err(e),
+        }
     }
 }
 
