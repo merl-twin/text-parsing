@@ -128,7 +128,7 @@ impl ReadTag {
         if let Some(attr) = &mut self.tmp_buffer {
             match &mut attr.tmp_value {
                 Some(snip) => match off > snip.offset {
-                    true => snip.length = off - snip.offset,
+                    true => snip.length = off - snip.offset + 1,
                     false => *snip = Snip{ offset: off, length: 1 },
                 },
                 None => attr.tmp_value = Some(Snip{ offset: off, length: 1 }),
