@@ -1,8 +1,6 @@
-use crate::{
-    Error,
-};
+use crate::Error;
 
-#[derive(Debug,Clone,Copy,Eq,PartialEq,Ord,PartialOrd)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Snip {
     pub offset: usize,
     pub length: usize,
@@ -10,24 +8,31 @@ pub struct Snip {
 
 pub trait Localize: Sized {
     fn localize(self, chars: Snip, bytes: Snip) -> Local<Self> {
-        Local { chars, bytes, data: self }
+        Local {
+            chars,
+            bytes,
+            data: self,
+        }
     }
 }
 impl<T: Sized> Localize for T {}
 
-#[derive(Debug,Clone,Copy,Eq,PartialEq,Ord,PartialOrd)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Local<E> {
     chars: Snip,
     bytes: Snip,
     data: E,
 }
 impl<E> Local<E> {
-    pub fn into_inner(self) -> (Local<()>,E) {
-        (Local {
-            chars: self.chars,
-            bytes: self.bytes,
-            data: (),
-        }, self.data)
+    pub fn into_inner(self) -> (Local<()>, E) {
+        (
+            Local {
+                chars: self.chars,
+                bytes: self.bytes,
+                data: (),
+            },
+            self.data,
+        )
     }
     pub fn data(&self) -> &E {
         &self.data
@@ -39,16 +44,22 @@ impl<E> Local<E> {
         self.bytes
     }
 
-    pub fn local<T>(&self, data: T) -> Local<T>
-    {
+    pub fn into_position(mut self) -> Local<E> {
+        self.chars.length = 0;
+        self.bytes.length = 0;
+        self
+    }
+
+    pub fn local<T>(&self, data: T) -> Local<T> {
         Local {
             chars: self.chars,
             bytes: self.bytes,
             data,
         }
     }
-    pub fn map<F,T>(self, mut mapper: F) -> Local<T>
-    where F: FnMut(E) -> T
+    pub fn map<F, T>(self, mut mapper: F) -> Local<T>
+    where
+        F: FnMut(E) -> T,
     {
         Local {
             chars: self.chars,
@@ -69,7 +80,7 @@ impl<E> Local<E> {
         self
     }
 
-    pub fn from_segment<T>(begin: Local<E>, end: Local<T>) -> Result<Local<E>,Error> {
+    pub fn from_segment<T>(begin: Local<E>, end: Local<T>) -> Result<Local<E>, Error> {
         if (begin.chars.offset <= end.chars.offset) && (begin.bytes.offset <= end.bytes.offset) {
             Ok(Local {
                 chars: Snip {
